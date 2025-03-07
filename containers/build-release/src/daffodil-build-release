@@ -25,27 +25,23 @@ export SOURCE_DATE_EPOCH=$(git show --no-patch --format=%ct HEAD)
 
 echo "Select a project: "
 select PROJECT in daffodil daffodil-sbt daffodil-vscode; do
-  case $PROJECT in
-    "daffodil" | "daffodil-sbt")
-      PROJECT_VERSION=$(grep 'version :=' build.sbt | cut -d\" -f2)
-      break
-      ;;
-    "daffodil-vscode")
-      PROJECT_VERSION=$(grep '"version"' package.json | cut -d\" -f4)
-      break
-      ;;
-    *)
-      echo "unknown project: $PROJECT" >&2
-      exit 1
-      ;;
-  esac
+  if [[ -n "$PROJECT" ]]
+  then
+    break;
+  fi
+  echo "invalid choice, select again"
 done
+
 echo
 
 read -p "Pre-release label (e.g. rc1 to rc99) or empty for final release: " PRE_RELEASE_LABEL
 echo
 
-# apppend the pre-release label if it is not empty/all whitepsace
+# determine the release version. If the pre-release label is not empty or all
+# whitespace, then append it to the project version. Otherwise we just build
+# without a pre-release label. This is potential useful for verifying
+# reproducible builds for final releases
+PROJECT_VERSION=$(cat VERSION)
 if [[ ! $PRE_RELEASE_LABEL =~ ^[\s]*$ ]]
 then
   RELEASE_VERSION=$PROJECT_VERSION-$PRE_RELEASE_LABEL
