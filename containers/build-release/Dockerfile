@@ -43,7 +43,8 @@ RUN \
     rpm \
     unzip \
     wine32 \
-    winetricks && \
+    winetricks \
+    xvfb && \
   echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" > /etc/apt/sources.list.d/sbt.list && \
   curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" | \
     gpg --no-default-keyring --keyring gnupg-ring:/etc/apt/trusted.gpg.d/scalasbt-release.gpg --import && \
@@ -51,33 +52,22 @@ RUN \
   apt-get update && \
   apt-get install -y \
     sbt && \
-  npm --no-update-notifier install --global yarn@1.22.19 node@20 && \
-  winetricks -q dotnet40
+  npm --no-update-notifier install --global yarn@1.22.19 node@20
 
-# WIX is a Microsoft Windows Installer creation tool kit.
-#
-# Install wix, including changes to allow WiX to run in wine on Linux. See
-# src/wix_wine.sh for more details on why we need to do this and how it works
-#
-# Updating WIX should be done only if there is a specific need (for security, or other compelling reason)
-# because it is likely things will break and the release scripts/process will have to adapt.
-# The WIX version 3.11.2 is hard coded into these script lines as tokens wix3112rtm and wix311.
-#
-# In order to ensure we are downloading and using the exact WIX binary we have tested and trust
-# we verify the sha512 is the same as the one expected. This protects us from if someone
-# was to get github credentials allowing them to change the wix binaries on github.
-# If WIX is updated to a newer version, this sha512 will need to be recomputed.
+# Download and install Inno Setup via wine. Even though we provide options to
+# make Inno Setup a headless install, wine still thinks it wants to open a
+# window so we need install with a temporary virtual X server with xvfb-run.
+# Also ensure it is installed in the directory where the deafult Daffodil SBT
+# configuration expects it--different wine configurations could install it
+# somewhere else.
 RUN \
-  WIXSHA=6fd961c85e1e6adafb99ef50c9659e3eb83c84ecaf49f523e556788845b206e1857aba2c39409405d4cda1df9b30a552ce5aab808be5f8368a37a447d78d1a05 && \
-  curl -sS -L https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -o wix311-binaries.zip && \
-  echo "$WIXSHA wix311-binaries.zip" | sha512sum --quiet -c - && \
-  mkdir /opt/wix && \
-  unzip -q wix311-binaries.zip -d /opt/wix/ && \
-  rm wix311-binaries.zip
-RUN mv /opt/wix/candle.exe /opt/wix/real-candle.exe
-RUN mv /opt/wix/light.exe /opt/wix/real-light.exe
-COPY src/wix_wine.sh /opt/wix/candle.exe
-COPY src/wix_wine.sh /opt/wix/light.exe
+  INNO_SETUP_EXE="innosetup-6.4.1.exe" && \
+  EXPECTED_SHA=5dfc9999e2feafa28754baaf80cf73ac96414228b94a1132a919554a822c892810197305d9355885b9ac408c214691cd45279fc2df3a891fbebc4f8eb86bac87 && \
+  curl -L https://files.jrsoftware.org/is/6/$INNO_SETUP_EXE -o $INNO_SETUP_EXE && \
+  echo "$EXPECTED_SHA $INNO_SETUP_EXE" | sha512sum --quiet -c - && \
+  winetricks -q win10 && \
+  xvfb-run wine $INNO_SETUP_EXE /VERYSILENT /SUPPRESSMSGBOXES /TASKS= '/DIR=C:\\Program Files (x86)\\Inno Setup 6' && \
+  rm $INNO_SETUP_EXE
 
 # We expect users to mount the project repo to /root/project, so we change that
 # to our working directory so the daffodil-build-release command is run from
