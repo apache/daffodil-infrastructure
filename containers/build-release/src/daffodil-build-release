@@ -70,16 +70,15 @@ case $PROJECT in
       +compile \
       +publish \
       daffodil-cli/Rpm/packageBin \
-      daffodil-cli/Windows/packageBin \
+      daffodil-cli/packageWindowsBin \
       daffodil-cli/Universal/packageBin \
       daffodil-cli/Universal/packageZipTarball
 
     cp daffodil-cli/target/universal/apache-daffodil-*.tgz $DIST_DIR/bin/
     cp daffodil-cli/target/universal/apache-daffodil-*.zip $DIST_DIR/bin/
     cp daffodil-cli/target/rpm/RPMS/noarch/apache-daffodil-*.rpm $DIST_DIR/bin/
-    MSI_NAME=$(basename $DIST_DIR/bin/*.zip .zip).msi
-    cp daffodil-cli/target/windows/Daffodil.msi $DIST_DIR/bin/$MSI_NAME
-    chmod -x $DIST_DIR/bin/$MSI_NAME
+    cp daffodil-cli/target/windows/apache-daffodil-*.exe $DIST_DIR/bin/
+    chmod -x $DIST_DIR/bin/*.exe
     ;;
 
   "daffodil-sbt")
