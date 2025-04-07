@@ -51,7 +51,7 @@ async function run() {
 						stdout: (data) => { checksum += data.toString(); }
 					}
 				});
-				fs.appendFileSync(`${ artifact.name }.sha512`, checksum);
+				fs.appendFileSync(`${ artifact.parentPath }/${ artifact.name }.sha512`, checksum);
 				await exec("gpg", ["--default-key", gpg_signing_key_id, "--batch", "--yes", "--detach-sign", "--armor", "--output", `${ artifact.name }.asc`, artifact.name], {
 					cwd: artifact.parentPath
 				});
