@@ -96,9 +96,20 @@ printf "\n==== Dist GPG Signatures ====\n"
 find $DIST_DIR -type f ! -name '*.sha512' ! -name '*.asc' \
 	-exec bash -c "gpg --verify '{}.asc' '{}' $PRINT_FIND_RESULT" \;
 
-printf "\n==== RPM Signatures ====\n"
+printf "\n==== RPM Embedded Signatures ====\n"
+# The "rpm -K ..." command is used to verify that embedded digests and/or
+# signatures of an RPM are correct, but it does not require that either
+# actually exists. The format of its output is
+#
+#   <rpm_name>: (digests)? (signatures)? [OK|NOT OK]
+#
+# where "digests" and "signatures" are optional (depending on if the RPM has
+# embedded digests/signatures) and "OK" is output if all embedded digests and
+# signatures are valid, or "NOT OK" otherwise. We require that released RPMs
+# have both embedded signatures and digests and that they are all valid, so we
+# ensure the output of rpm -K contains the expect string that indicates this.
 find $DIST_DIR -type f -name '*.rpm' \
-	-exec bash -c "rpm -K '{}' $PRINT_FIND_RESULT" \;
+	-exec bash -c "rpm -K '{}' | grep 'digests signatures OK' $PRINT_FIND_RESULT" \;
 
 if [ -n "$MAVEN_URL" ]
 then
@@ -122,10 +133,13 @@ then
 	exit 0
 fi
 
-printf "\n==== Calculating Differences ====\n"
-
-# The released rpm file has an embedded signature, deleting the signature
-# should cause the RPMs to be byte-for-byte the same
+# RPM files have an embedded signature which makes reproducibility checking
+# difficult since locally built RPMs will not have the embedded signature.
+# However, the RPMs should be identical if we delete that signature. So we
+# create a backup of the original RPM files, delete the embedded signature,
+# run the diff command, and then restore the backups.
+BACKUP_DIR=$(mktemp -d)
+find $DIST_DIR -name '*.rpm' -exec cp --parents {} $BACKUP_DIR \;
 find $DIST_DIR -name '*.rpm' -execdir rpmsign --delsign {} \; &>/dev/null
 
 # Reasons for excluding files from the diff check:
@@ -143,3 +157,7 @@ DIFF=$(diff \
 	--exclude=*.asc.sha1 \
 	$RELEASE_DIR/ $LOCAL_RELEASE_DIR/)
 [ $? -eq 0 ] && echo -e "$PASS no differences found" || (echo "$DIFF" | xargs -I {} echo -e "$FAIL {}")
+
+# restore and delete the backup directory
+cp -R $BACKUP_DIR/. .
+rm -rf $BACKUP_DIR

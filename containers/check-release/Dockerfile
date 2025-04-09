@@ -24,7 +24,8 @@ RUN \
 
 RUN \
   wget https://downloads.apache.org/daffodil/KEYS && \
-  gpg --import KEYS
+  gpg --import KEYS && \
+  rpm --import KEYS
 
 # Install and set the entrypoint
 COPY src/check-release.sh /usr/bin/daffodil-check-release
