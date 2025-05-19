@@ -31892,9 +31892,9 @@ async function run() {
 
 		// figure out the release version. This should follow the pattern
 		// 'v<VERSION>-rcX', where <VERSION> is the value from the VERSION file
-		const gitTagPrefix = "refs/tags";
+		const gitTagPrefix = "refs/tags/";
 		let release_version = "";
-		if (github.context.eventName == "push" && github.context.ref.startsWith(getTagPrefix)) {
+		if (github.context.eventName == "push" && github.context.ref.startsWith(gitTagPrefix)) {
 			// this was triggered by the push of a tag, the tag name will be the
 			// version used
 			release_version = github.context.ref.slice(gitTagPrefix.length);
