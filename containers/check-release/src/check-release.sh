@@ -22,6 +22,31 @@ then
 	exit 1
 fi
 
+download_dir() {
+	# force a trailing slash by removing a slash it if exists and then adding
+	# it back. This is required for maven URLs to download the right thing--it
+	# doesn't matter either way for dist urls
+	URL="${1%/}/"
+	# non-greedily delete the schema and domain part of the URL, giving just
+	# the path part
+	URL_PATH="${URL#*://*/}"
+	# we want to use --cut-dirs to ignore all directories but the final target
+	# directory. This number is different depending on the URL, so we extract
+	# and count the nubmer of slash-separated fields of the url path and
+	# subtract 2 (one because we want to keep the last field, and one because
+	# there is an extra field because the path ends in a slash)
+	CUT_DIRS=$(echo "$URL_PATH" | awk -F/ '{print NF - 2}')
+	wget \
+		--recursive \
+		--level=inf \
+		-e robots=off \
+		--no-parent \
+		--no-host-directories \
+		--reject=index.html,robots.txt \
+		--cut-dirs=$CUT_DIRS \
+		"$URL"
+}
+
 # URL of release candidate directory in dev/dist/, e.g. https://dist.apache.org/repos/dist/dev/daffodil/1.0.0-rc1
 DIST_URL=$1
 
@@ -49,7 +74,6 @@ then
 	require_command rpmsign
 fi
 
-WGET="wget --recursive --level=inf -e robots=off --no-parent --no-host-directories --reject=index.html,robots.txt"
 
 RELEASE_DIR=release-download
 DIST_DIR=$RELEASE_DIR/asf-dist
@@ -60,16 +84,21 @@ printf "\n==== Downloading Release Files ====\n"
 # download dist/dev/ files
 mkdir -p $DIST_DIR
 pushd $DIST_DIR &>/dev/null
-$WGET --cut-dirs=4 $DIST_URL/
+download_dir $DIST_URL
 popd &>/dev/null
 
-# download maven repository, delete nexus generated files
+# download maven repository, delete nexus generated files, and remove the
+# orgapachedaffodil-1234 dir since the build-release container does not have
+# this directory
 if [ -n "$MAVEN_URL" ]
 then
 	mkdir -p $MAVEN_DIR
 	pushd $MAVEN_DIR &>/dev/null
-	$WGET --cut-dirs=3 $MAVEN_URL/
+	download_dir $MAVEN_URL
 	find . -type f \( -name 'archetype-catalog.xml' -o -name 'maven-metadata.xml*' \) -delete
+	REPO_DIR=(*/)
+	mv $REPO_DIR/* .
+	rmdir $REPO_DIR
 	popd &>/dev/null
 fi
 
