@@ -19,7 +19,6 @@ RUN \
   dnf -y --quiet --repo=fedora install \
     diff \
     gpg \
-    rpmsign \
     wget
 
 RUN \

@@ -44,10 +44,6 @@ require_command rpm
 require_command sha1sum
 require_command sha512sum
 require_command wget
-if [ -n "$LOCAL_RELEASE_DIR" ]
-then
-	require_command rpmsign
-fi
 
 WGET="wget --recursive --level=inf -e robots=off --no-parent --no-host-directories --reject=index.html,robots.txt"
 
@@ -134,13 +130,42 @@ then
 fi
 
 # RPM files have an embedded signature which makes reproducibility checking
-# difficult since locally built RPMs will not have the embedded signature.
-# However, the RPMs should be identical if we delete that signature. So we
-# create a backup of the original RPM files, delete the embedded signature,
-# run the diff command, and then restore the backups.
+# difficult since locally built RPMs will not have the embedded signature. The
+# RPMs should be identical if we delete that signature, but unfortunately
+# rpmsign --delsign does not necessarily make RPMs byte for byte identical--
+# sometimes it rebuilds them in slightly different ways that are technically
+# the same but not identical. So we sort of delete the signature header
+# ourselves. This is done by calculating the size of the signature header in
+# the locally built RPM and copying those bytes into the dist RPM. As long as
+# the two signature headers are the same size (which they should always be),
+# this should work. Since we are changing the dist files, we create a backup of
+# them first, replace the signature header, run the diff command, then restore
+# the backups.
+#
+# All signature/checksum data is stored in a "signature header". This header
+# starts immediately after the 96-byte "lead". The header format is:
+#
+#  * magic number: 8 bytes
+#  * index_count: 4 bytes (uint32_t)
+#  * data_length: 4 bytes (uint32_t)
+#  * index: index_count * 16-byte entries
+#  * data: data_length bytes
+#
+# To find the total length of the signature header we read the index_count and
+# data_length fields at a known offset (skipping the lead and magic number),
+# then add together the length of 3 fixed length fields (16 bytes), the length
+# of the index (16 * index_count) and the length of the data (data_length).
 BACKUP_DIR=$(mktemp -d)
 find $DIST_DIR -name '*.rpm' -exec cp --parents {} $BACKUP_DIR \;
-find $DIST_DIR -name '*.rpm' -execdir rpmsign --delsign {} \; &>/dev/null
+for SRC_RPM in `find $LOCAL_RELEASE_DIR -name '*.rpm'`
+do
+	find $DIST_DIR -name "$(basename $SRC_RPM)" -exec bash -c '
+		LEAD_SIZE=96
+		read SIG_INDEX_COUNT SIG_DATA_LENGTH < <(od -An -t u4 -j $((LEAD_SIZE+8)) -N 8 --endian=big "$1")
+		SIG_HEADER_LENGTH=$((16 + SIG_INDEX_COUNT*16 + SIG_DATA_LENGTH))
+		dd if="$1" of="$2" bs=1 skip=$LEAD_SIZE seek=$LEAD_SIZE count=$SIG_HEADER_LENGTH conv=notrunc
+	' _ "$SRC_RPM" {} \; &> /dev/null
+done
 
 # Reasons for excluding files from the diff check:
 # - The downloaded .rpm file has an embedded signature (which we removed),
