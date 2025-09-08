@@ -17,7 +17,7 @@ FROM registry.fedoraproject.org/fedora:41
 
 RUN \
   dnf -y --quiet --repo=fedora install \
-    diff \
+    cmp \
     gpg \
     wget
 

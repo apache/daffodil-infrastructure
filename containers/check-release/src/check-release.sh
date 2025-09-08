@@ -37,7 +37,7 @@ require_command() {
 }
 
 # error early if needed tools are missing
-require_command diff
+require_command cmp
 require_command gpg
 require_command md5sum
 require_command rpm
@@ -79,18 +79,72 @@ PASS="$GREEN✔$RESET"
 FAIL="$RED✘$RESET"
 WARN="$YELLOW‼$RESET"
 
-# used in the string of a find -exec command. Outputs a string representing
-# pass/fail depending on how the previous command ran, followed by the filename
-# from the find command
-PRINT_FIND_RESULT="&> /dev/null && echo -ne '$PASS' || echo -ne '$FAIL'; echo ' {}'"
+FAILURE_COUNT=0
+
+# Read a list of newline separated paths from a file ($1) and commands from
+# stdin to evaluate for each line in the file. Each line in the file is
+# expected to be a path to a file, but it is not enforced. All {} strings in the
+# commands are replaced with the current line in the file prior to evaluation.
+# The commands are also evaluated in a new bash process, so they are free to
+# include commands like 'cd' or 'exit' without affecting the main script. Note
+# this means they cannot access variables or functions in the current process
+# scope. For each line, this outputs a pass/fail icon (based on the exit code
+# of the last command) followed by the line. A count of all failures is tallied
+# in the FAILURE_COUNT variable.
+#
+# Usage tips:
+#
+# It is recommended to wrap {} in apostrophes to avoid unexpected variable or
+# other expansions.
+#
+# Process substitution can be used for the file list to to avoid the need to
+# create actual files.
+#
+# Commands are read from stdin to support the recommended use of heredocs. In
+# general, tests should use <<-'CMD' commands CMD, especially if no variable
+# expansion or process substitution is wanted or needed. If that is needed,
+# tests should usually use <<-CMD commands CMD.
+#
+# Usage examples:
+#
+# test_files all_text_files.txt <<-'CMD'
+#     gpg --verify '{}.asc' '{}'
+# CMD
+#
+# test_files <(find dir/ -name '*.txt') <<-CMD
+#     cmp '{}' "$OTHER_DIR"/'{}'
+# CMD
+#
+test_files() {
+	FILE_LIST="$1"
+	CMDS=$(cat)
+	while IFS= read -r LINE
+	do
+		CMDS_TO_EVAL="${CMDS//\{\}/$LINE}"
+		bash -c "$CMDS_TO_EVAL" &> /dev/null
+		RC=$?
+		print_result $RC $LINE
+		[ $RC -eq 0 ] || FAILURE_COUNT=$((FAILURE_COUNT + 1))
+	done < "$FILE_LIST"
+}
+
+print_result() {
+	RC=$1
+	MESSAGE=$2
+	[ $RC -eq 0 ] && echo -ne "$PASS" || echo -ne "$FAIL"
+	echo " $MESSAGE"
+}
 
 printf "\n==== Dist SHA512 Checksum ====\n"
-find $DIST_DIR -type f ! -name '*.sha512' ! -name '*.asc' \
-	-exec bash -c "cd \"\$(dirname '{}')\" && sha512sum --check \$(basename '{}').sha512 $PRINT_FIND_RESULT" \;
+test_files <(find "$DIST_DIR" -type f ! -name '*.sha512' ! -name '*.asc') <<-'CMD'
+	cd "$(dirname '{}')"
+	sha512sum --check "$(basename '{}').sha512"
+CMD
 
 printf "\n==== Dist GPG Signatures ====\n"
-find $DIST_DIR -type f ! -name '*.sha512' ! -name '*.asc' \
-	-exec bash -c "gpg --verify '{}.asc' '{}' $PRINT_FIND_RESULT" \;
+test_files <(find "$DIST_DIR" -type f ! -name '*.sha512' ! -name '*.asc') <<-'CMD'
+	gpg --verify '{}.asc' '{}'
+CMD
 
 printf "\n==== RPM Embedded Signatures ====\n"
 # The "rpm -K ..." command is used to verify that embedded digests and/or
@@ -104,85 +158,92 @@ printf "\n==== RPM Embedded Signatures ====\n"
 # signatures are valid, or "NOT OK" otherwise. We require that released RPMs
 # have both embedded signatures and digests and that they are all valid, so we
 # ensure the output of rpm -K contains the expect string that indicates this.
-find $DIST_DIR -type f -name '*.rpm' \
-	-exec bash -c "rpm -K '{}' | grep 'digests signatures OK' $PRINT_FIND_RESULT" \;
+test_files <(find "$DIST_DIR" -type f -name '*.rpm') <<-'CMD'
+	rpm -K '{}' | grep 'digests signatures OK'
+CMD
 
 if [ -n "$MAVEN_URL" ]
 then
 	printf "\n==== Maven SHA1 Checksums ====\n"
-	find $MAVEN_DIR -type f ! -name '*.sha1' ! -name '*.md5' ! -name '*.asc' \
-		-exec bash -c "diff <(sha1sum '{}' | cut -d' ' -f1 | tr -d '\n') <(cat '{}'.sha1) $PRINT_FIND_RESULT" \;
+	test_files <(find "$MAVEN_DIR" -type f ! -name '*.sha1' ! -name '*.md5' ! -name '*.asc') <<-'CMD'
+		cmp <(sha1sum '{}' | cut -d' ' -f1 | tr -d '\n') '{}.sha1'
+	CMD
 
 	printf "\n==== Maven MD5 Checksums ====\n"
-	find $MAVEN_DIR -type f ! -name '*.sha1' ! -name '*.md5' ! -name '*.asc' \
-		-exec bash -c "diff <(md5sum '{}' | cut -d' ' -f1 | tr -d '\n' ) <(cat '{}'.md5) $PRINT_FIND_RESULT" \;
+	test_files <(find "$MAVEN_DIR" -type f ! -name '*.sha1' ! -name '*.md5' ! -name '*.asc') <<-'CMD'
+		cmp <(md5sum '{}' | cut -d' ' -f1 | tr -d '\n' ) '{}.md5'
+	CMD
 
 	printf "\n==== Maven GPG Signatures ====\n"
-	find $MAVEN_DIR -type f ! -name '*.sha1' ! -name '*.md5' ! -name '*.asc' \
-		-exec bash -c "gpg --verify '{}.asc' '{}' $PRINT_FIND_RESULT" \;
+	test_files <(find "$MAVEN_DIR" -type f ! -name '*.sha1' ! -name '*.md5' ! -name '*.asc') <<-'CMD'
+		gpg --verify '{}.asc' '{}'
+	CMD
 fi
 
 printf "\n==== Reproducible Builds ====\n"
 if [ -z "$LOCAL_RELEASE_DIR" ]
 then
 	echo -e "$WARN no local release directory provided, skipping reproducible build check"
-	exit 0
+else
+	# RPM files have an embedded signature which makes reproducibility checking
+	# difficult since locally built RPMs will not have the embedded signature. The
+	# RPMs should be identical if we delete that signature, but unfortunately
+	# rpmsign --delsign does not necessarily make RPMs byte for byte identical--
+	# sometimes it rebuilds them in slightly different ways that are technically
+	# the same but not identical. So we sort of delete the signature header
+	# ourselves. This is done by calculating the size of the signature header in
+	# the locally built RPM and copying those bytes into the dist RPM. As long as
+	# the two signature headers are the same size (which they should always be),
+	# this should work. Since we are changing the dist files, we create a backup of
+	# them first, replace the signature header, run the diff command, then restore
+	# the backups.
+	#
+	# All signature/checksum data is stored in a "signature header". This header
+	# starts immediately after the 96-byte "lead". The header format is:
+	#
+	#  * magic number: 8 bytes
+	#  * index_count: 4 bytes (uint32_t)
+	#  * data_length: 4 bytes (uint32_t)
+	#  * index: index_count * 16-byte entries
+	#  * data: data_length bytes
+	#
+	# To find the total length of the signature header we read the index_count and
+	# data_length fields at a known offset (skipping the lead and magic number),
+	# then add together the length of 3 fixed length fields (16 bytes), the length
+	# of the index (16 * index_count) and the length of the data (data_length).
+	BACKUP_DIR="$(mktemp -d)"
+	find "$RELEASE_DIR" -name '*.rpm' -exec cp --parents '{}' "$BACKUP_DIR" \;
+	while IFS= read -r RPM_PATH
+	do
+		LOCAL_RPM="$LOCAL_RELEASE_DIR/$RPM_PATH"
+		RELEASE_RPM="$RELEASE_DIR/$RPM_PATH"
+		LEAD_SIZE=96
+		read SIG_INDEX_COUNT SIG_DATA_LENGTH < <(od -An -t u4 -j $((LEAD_SIZE+8)) -N 8 --endian=big "$LOCAL_RPM")
+		SIG_HEADER_LENGTH=$((16 + SIG_INDEX_COUNT*16 + SIG_DATA_LENGTH))
+		dd if="$LOCAL_RPM" of="$RELEASE_RPM" skip=$LEAD_SIZE seek=$LEAD_SIZE \
+			bs=1 count=$SIG_HEADER_LENGTH conv=notrunc &> /dev/null
+	done < <(find "$LOCAL_RELEASE_DIR/" -name '*.rpm' -printf '%P\n')
+
+	# Reasons for excluding files from the diff check:
+	# - The downloaded .rpm file has an embedded signature (which we removed),
+	#   locally built RPM does not so checksums will be different. RPMs should be
+	#   exactly the same with the signature removed though.
+	# - The .asc files can only be generated by the system with the secret key, the
+	#   locally built releases are not signed
+	test_files <(find "$RELEASE_DIR/" "$LOCAL_RELEASE_DIR/" \
+			-type f \
+			! -name '*.rpm.sha512' \
+			! -name '*.asc' \
+			! -name '*.asc.md5' \
+			! -name '*.asc.sha1' \
+			-printf '%P\n' | sort -u) <<-CMD
+		cmp "$RELEASE_DIR"/'{}' "$LOCAL_RELEASE_DIR"/'{}'
+	CMD
+
+	# restore and delete the backup directory
+	cp -R "$BACKUP_DIR/." .
+	rm -rf "$BACKUP_DIR"
 fi
 
-# RPM files have an embedded signature which makes reproducibility checking
-# difficult since locally built RPMs will not have the embedded signature. The
-# RPMs should be identical if we delete that signature, but unfortunately
-# rpmsign --delsign does not necessarily make RPMs byte for byte identical--
-# sometimes it rebuilds them in slightly different ways that are technically
-# the same but not identical. So we sort of delete the signature header
-# ourselves. This is done by calculating the size of the signature header in
-# the locally built RPM and copying those bytes into the dist RPM. As long as
-# the two signature headers are the same size (which they should always be),
-# this should work. Since we are changing the dist files, we create a backup of
-# them first, replace the signature header, run the diff command, then restore
-# the backups.
-#
-# All signature/checksum data is stored in a "signature header". This header
-# starts immediately after the 96-byte "lead". The header format is:
-#
-#  * magic number: 8 bytes
-#  * index_count: 4 bytes (uint32_t)
-#  * data_length: 4 bytes (uint32_t)
-#  * index: index_count * 16-byte entries
-#  * data: data_length bytes
-#
-# To find the total length of the signature header we read the index_count and
-# data_length fields at a known offset (skipping the lead and magic number),
-# then add together the length of 3 fixed length fields (16 bytes), the length
-# of the index (16 * index_count) and the length of the data (data_length).
-BACKUP_DIR=$(mktemp -d)
-find $DIST_DIR -name '*.rpm' -exec cp --parents {} $BACKUP_DIR \;
-for SRC_RPM in `find $LOCAL_RELEASE_DIR -name '*.rpm'`
-do
-	find $DIST_DIR -name "$(basename $SRC_RPM)" -exec bash -c '
-		LEAD_SIZE=96
-		read SIG_INDEX_COUNT SIG_DATA_LENGTH < <(od -An -t u4 -j $((LEAD_SIZE+8)) -N 8 --endian=big "$1")
-		SIG_HEADER_LENGTH=$((16 + SIG_INDEX_COUNT*16 + SIG_DATA_LENGTH))
-		dd if="$1" of="$2" bs=1 skip=$LEAD_SIZE seek=$LEAD_SIZE count=$SIG_HEADER_LENGTH conv=notrunc
-	' _ "$SRC_RPM" {} \; &> /dev/null
-done
-
-# Reasons for excluding files from the diff check:
-# - The downloaded .rpm file has an embedded signature (which we removed),
-#   locally built RPM does not so checksums will be different. RPMs should be
-#   exactly the same with the signature removed though.
-# - The .asc files can only be generated by the system with the secret key, the
-#   locally built releases are not signed
-DIFF=$(diff \
-	--recursive \
-	--brief \
-	--exclude=*.rpm.sha512 \
-	--exclude=*.asc \
-	--exclude=*.asc.md5 \
-	--exclude=*.asc.sha1 \
-	$RELEASE_DIR/ $LOCAL_RELEASE_DIR/)
-[ $? -eq 0 ] && echo -e "$PASS no differences found" || (echo "$DIFF" | xargs -I {} echo -e "$FAIL {}")
-
-# restore and delete the backup directory
-cp -R $BACKUP_DIR/. .
-rm -rf $BACKUP_DIR
+printf "\n==== Results ====\n"
+print_result $FAILURE_COUNT "Total Failed Checks: $FAILURE_COUNT"
