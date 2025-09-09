@@ -45,6 +45,11 @@ download_dir() {
 		--reject=index.html,robots.txt \
 		--cut-dirs=$CUT_DIRS \
 		"$URL"
+
+	# wget on some systems (e.g. Ubuntu 22.04) leaves behind .tmp files used
+	# when downloading files, likely related to --reject=index.html. Delete
+	# those if they exist.
+	find "$(basename "$URL")" -name '*.tmp' -delete
 }
 
 # URL of release candidate directory in dev/dist/, e.g. https://dist.apache.org/repos/dist/dev/daffodil/1.0.0-rc1

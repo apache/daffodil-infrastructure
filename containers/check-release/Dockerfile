@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.fedoraproject.org/fedora:41
+FROM docker.io/library/ubuntu:22.04
 
 RUN \
-  dnf -y --quiet --repo=fedora install \
-    cmp \
+  apt-get update && \
+  apt-get install -qy \
+    diffutils \
     gpg \
+    rpm \
     wget
 
 RUN \
