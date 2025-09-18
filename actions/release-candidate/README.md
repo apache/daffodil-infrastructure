@@ -158,3 +158,39 @@ npm run build
 
 The changes this makes to `dist/` must be committed along with the changes to
 `src/`.
+
+# Testing
+
+Perform the following steps to test changes to the daffodil-infrastructure repo on a GitHub fork:
+
+1. Update the `uses` action of the `ASF Release Candidate` step in the
+   `.github/workflows/release-candidate.yml` file of the repository to be tested on. Then, 
+    push your changes to your fork of the test repository. 
+2. Add the secrets required by the `ASF Release Candidate` step to your
+    test repository. The following secrets are required:
+
+   - DAFFODIL_GPG_SECRET_KEY (any private key without a passphrase)
+   - DAFFODIL_SVN_DEV_USERNAME
+   - DAFFODIL_SVN_DEV_PASSWORD,
+   - NEXUS_STAGE_DEPLOYER_USER
+   - NEXUS_STAGE_DEPLOYER_PW
+
+   The other secrets should be set to non-empty dummy values and not actual 
+   usernames/passwords. They will not be used.
+3.  Now you can generate a release by going to the Actions tab of your test fork,
+    and selecting the workflow that uses the release-candidate action. 
+    Click the `Run workflow` button, and select the branch you just pushed to.
+4.  Once the run is complete, you can download the release from the `Artifacts` 
+    tab under `Summary`. After downloading the release, extract it. 
+
+If you want to validate things with the check-release container, follow its steps 
+as defined in its README.md. The only modification you need to make is to set the
+release label to `rc0`. Then run the checks using the container using the 
+following command:
+
+```bash
+podman run -it --rm \
+--volume <DOWNLOADED-RELEASE-DIR>:/release-download \
+--volume <ARTIFACT-DIR>:/release \
+daffodil-check-release "NA" "NA" /release
+```

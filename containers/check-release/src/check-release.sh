@@ -52,7 +52,7 @@ download_dir() {
 	find "$(basename "$URL")" -name '*.tmp' -delete
 }
 
-# URL of release candidate directory in dev/dist/, e.g. https://dist.apache.org/repos/dist/dev/daffodil/1.0.0-rc1
+# URL of release candidate directory in dist/dev, e.g. https://dist.apache.org/repos/dist/dev/daffodil/1.0.0-rc1
 DIST_URL=$1
 
 # URL of maven staging repository, e.g. https://repository.apache.org/content/repositories/orgapachedaffodil-1234
@@ -80,30 +80,36 @@ RELEASE_DIR=release-download
 DIST_DIR=$RELEASE_DIR/asf-dist
 MAVEN_DIR=$RELEASE_DIR/maven-local
 
-printf "\n==== Downloading Release Files ====\n"
 
-# download dist/dev/ files
-mkdir -p $DIST_DIR
-pushd $DIST_DIR &>/dev/null
-download_dir $DIST_URL
-popd &>/dev/null
-
-# download maven repository, delete nexus generated files, and remove the
-# orgapachedaffodil-1234 dir since the build-release container does not have
-# this directory
-if [ -n "$MAVEN_URL" ]
+if [ ! -d "$RELEASE_DIR" ]
 then
-	mkdir -p $MAVEN_DIR
-	pushd $MAVEN_DIR &>/dev/null
-	download_dir $MAVEN_URL
-	find . -type f \( -name 'archetype-catalog.xml' -o -name 'maven-metadata.xml*' \) -delete
-	REPO_DIR=(*/)
-	mv $REPO_DIR/* .
-	rmdir $REPO_DIR
-	popd &>/dev/null
-fi
+	printf "\n==== Downloading Release Files ====\n"
 
-printf "\n==== Download Complete ====\n"
+	# download dist/dev/ files
+	mkdir -p $DIST_DIR
+	pushd $DIST_DIR &>/dev/null
+	download_dir $DIST_URL
+	popd &>/dev/null
+
+	# download maven repository, delete nexus generated files, and remove the
+	# orgapachedaffodil-1234 dir since the build-release container does not have
+	# this directory
+	if [ -n "$MAVEN_URL" ]
+	then
+		mkdir -p $MAVEN_DIR
+		pushd $MAVEN_DIR &>/dev/null
+		download_dir $MAVEN_URL
+		find . -type f \( -name 'archetype-catalog.xml' -o -name 'maven-metadata.xml*' \) -delete
+		REPO_DIR=(*/)
+		mv $REPO_DIR/* .
+		rmdir $REPO_DIR
+		popd &>/dev/null
+	fi
+
+	printf "\n==== Download Complete ====\n"
+else
+	printf "\n==== Skipping Download, release-download/ directory already exists ====\n"
+fi
 
 RED="\x1b[31m"
 GREEN="\033[32m"
