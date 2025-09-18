@@ -21,7 +21,7 @@ This container can be used to verify the signatures, checksums, signatures, and
 optionally reproducibility.
 
 Note that it is possible to run the src/check-release.sh script standalone
-without the container, but the container proviedes an environment that has all
+without the container, but the container provides an environment that has all
 the necessary dependencies and keys already installed, so it may make release
 verification easier.
 
@@ -36,8 +36,8 @@ To use the container image to check a release, run the following:
 
 Alternatively, if you would like to do the same checks but also check for
 reproducibility, use the Release Candidate Container to build a release
-directory directory, then run the following:
+directory, then run the following:
 
     podman run -it --rm \
-      --volume <RELEASE_DIR>:/release
+      --volume <RELEASE_DIR>:/release \
       daffodil-check-release "<DIST_URL>" "<MAVEN_URL>" /release

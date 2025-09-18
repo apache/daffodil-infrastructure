@@ -70,7 +70,10 @@ DIST_DIR=$RELEASE_DIR/asf-dist/$RELEASE_VERSION
 MAVEN_DIR=$RELEASE_DIR/maven-local
 
 mkdir -p ~/.sbt/1.0
+mkdir -p ~/.sbt/1.0/plugins
 echo "ThisBuild / publishTo := Some(MavenCache(\"maven-local\", file(\"$MAVEN_DIR\")))" >> ~/.sbt/1.0/build.sbt
+echo "addSbtPlugin(\"com.github.sbt\" %% \"sbt-sbom\" % \"0.4.0\")" >> ~/.sbt/1.0/plugins/plugins.sbt
+echo "ThisBuild / bomFormat := \"xml\"" >> ~/.sbt/1.0/build.sbt
 
 echo "==== Building source artifact ===="
 mkdir -p $DIST_DIR/src/
