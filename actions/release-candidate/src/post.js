@@ -64,14 +64,18 @@ async function run() {
 		} else {
 			// if publishing was disabled then this action was likely just triggered
 			// just for testing, so upload the maven-local and artifact directories so
-			// they can be verified
-			const release_dir = `${ os.tmpdir() }/release`;
-			const upload_artifacts = fs.readdirSync(release_dir, { recursive: true, withFileTypes: true })
+			// they can be verified. Note that we do not just recurse the
+			// release-download directory since it could contain files that already
+			// exist in the SVN checkout and were not artifacts created by this action
+			const release_dir = `${ os.tmpdir() }/release-download`;
+			const svn_artifacts = fs.readdirSync(artifact_dir, { recursive: true, withFileTypes: true });
+			const maven_artifacts = fs.readdirSync(`${ release_dir }/maven-local`, { recursive: true, withFileTypes: true });
+			const upload_artifacts = [...svn_artifacts, ...maven_artifacts]
 				.filter((dirent) => dirent.isFile())
 				.filter((dirent) => !dirent.parentPath.split("/").includes(".svn"))
 				.map((dirent) => `${ dirent.parentPath }/${ dirent.name }`);
 			const artifact_client = new DefaultArtifactClient();
-			artifact_client.uploadArtifact(`release`, upload_artifacts, os.tmpdir(), {
+			artifact_client.uploadArtifact("release-download", upload_artifacts, os.tmpdir(), {
 				compressionLevel: 0,
 				retentionDays: 1
 			});

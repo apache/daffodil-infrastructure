@@ -102,7 +102,14 @@ async function run() {
 			publish = false;
 		}
 
-		const release_dir = `${ os.tmpdir() }/release`;
+		// the name of the directory where we store release artifacts doesn't actually
+		// matter since it is never published anywhere. The one time where this isn't true
+		// is if publishing is disabled, in which case this directory is made available as
+		// a downloadable GitHub artifact. Naming it "release-download" makes it more
+		// clear this is a downloaded artifact rather than locally built--this
+		// differentiates it from artifacts created with the build-release container and
+		// follows the naming convention expected by the check-release script.
+		const release_dir = `${ os.tmpdir() }/release-download`;
 		fs.mkdirSync(release_dir);
 
 		// enable and configure SBT for signing and publishing. Note that the
