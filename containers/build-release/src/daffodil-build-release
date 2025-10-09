@@ -105,7 +105,7 @@ case $PROJECT in
     ;;
 
   "daffodil-vscode")
-    set_java_version 8
+    set_java_version 17
     mkdir -p $DIST_DIR/bin/
     yarn package
     cp *.vsix $DIST_DIR/bin/
