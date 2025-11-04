@@ -33,23 +33,23 @@ inputs:
     default: ""
   gpg_signing_key:
     description: Key used to sign artifacts
-    required: true
+    required: false
   svn_username:
     description: Username for publishing release artifacts to SVN dev/dist
-    required: true
+    required: false
   svn_password:
     description: Password for publishing release artifacts to SVN dev/dist
-    required: true
+    required: false
   nexus_username:
     description: Username for publishing release artifacts to Nexus
-    required: true
+    required: false
   nexus_password:
     description: Password for publishing release artifacts to Nexus
-    required: true
+    required: false
   publish:
     description: Enable/disabling publish artifacts. Must be explcitly set to true to enable publishing. Maybe ignored depending on other factors.
     required: false
-    default: false
+    default: "false"
 
 outputs:
   artifact_dir:

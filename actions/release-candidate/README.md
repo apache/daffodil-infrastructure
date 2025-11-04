@@ -70,18 +70,18 @@ This is useful for testing the workflow using workflow dispatch.
 
 ## Inputs
 
-| Input           | Required | Default | Description |
-|-----------------|----------|---------|-------------|
-| tlp_dir         | yes      |         | Directory of the top level project in dist/dev/ |
-| project_name    | yes      |         | Human readable name of the project |
-| project_id      | yes      |         | ID of the project, used in source artifact file name |
-| project_dir     | no       | ""      | Directory for the project in dev/dist/<tlp_dir>/. Omit if at the root |
-| gpg_signing_key | yes      |         | Key used to sign artifacts |
-| svn_username    | yes      |         | Username for publishing release artifacts to SVN dev/dist |
-| svn_password    | yes      |         | Password for publishing release artifacts to SVN dev/dist |
-| nexus_username  | yes      |         | Username for publishing release artifacts to Nexus |
-| nexus_password  | yes      |         | Password for publishing release artifacts to Nexus |
-| publish         | no       | false   | Enable/disabling publish artifacts. Must be explicitly set to true to enable publishing. May be ignored depending on other factors. |
+| Input           | Required      | Default | Description |
+|-----------------|---------------|---------|-------------|
+| tlp_dir         | yes           |         | Directory of the top level project in dist/dev/ |
+| project_name    | yes           |         | Human readable name of the project |
+| project_id      | yes           |         | ID of the project, used in source artifact file name |
+| project_dir     | no            | ""      | Directory for the project in dev/dist/<tlp_dir>/. Omit if at the root |
+| gpg_signing_key | if publishing |         | Key used to sign artifacts |
+| svn_username    | if publishing |         | Username for publishing release artifacts to SVN dev/dist |
+| svn_password    | if publishing |         | Password for publishing release artifacts to SVN dev/dist |
+| nexus_username  | if publishing |         | Username for publishing release artifacts to Nexus |
+| nexus_password  | if publishing |         | Password for publishing release artifacts to Nexus |
+| publish         | no            | false   | Enable/disabling publish artifacts. Must be explicitly set to true to enable publishing. May be ignored depending on other factors. |
 
 ## Outputs
 
@@ -165,22 +165,11 @@ Perform the following steps to test changes to the daffodil-infrastructure repo 
 
 1. Update the `uses` action of the `ASF Release Candidate` step in the
    `.github/workflows/release-candidate.yml` file of the repository to be tested on. Then, 
-    push your changes to your fork of the test repository. 
-2. Add the secrets required by the `ASF Release Candidate` step to your
-    test repository. The following secrets are required:
-
-   - DAFFODIL_GPG_SECRET_KEY (any private key without a passphrase)
-   - DAFFODIL_SVN_DEV_USERNAME
-   - DAFFODIL_SVN_DEV_PASSWORD,
-   - NEXUS_STAGE_DEPLOYER_USER
-   - NEXUS_STAGE_DEPLOYER_PW
-
-   The other secrets should be set to non-empty dummy values and not actual 
-   usernames/passwords. They will not be used.
-3.  Now you can generate a release by going to the Actions tab of your test fork,
+    push your changes to your fork of the test repository.
+2. Now you can generate a release by going to the Actions tab of your test fork,
     and selecting the workflow that uses the release-candidate action. 
     Click the `Run workflow` button, and select the branch you just pushed to.
-4.  Once the run is complete, you can download the release from the `Artifacts` 
+3. Once the run is complete, you can download the release from the `Artifacts` 
     tab under `Summary`. After downloading the release, extract it. 
 
 If you want to validate things with the check-release container, follow its steps 
@@ -194,3 +183,4 @@ podman run -it --rm \
 --volume <ARTIFACT-DIR>:/release \
 daffodil-check-release "NA" "NA" /release
 ```
+> Note: The public key needed to verify the artifacts is available in the release-download directory.

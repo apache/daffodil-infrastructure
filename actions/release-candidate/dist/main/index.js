@@ -31855,46 +31855,66 @@ async function run() {
 		const tlp_dir = core.getInput("tlp_dir", { required: true });
 		const project_id = core.getInput("project_id", { required: true });
 		const project_dir = core.getInput("project_dir");
-		const gpg_signing_key = core.getInput("gpg_signing_key", { required: true });
-		const svn_username = core.getInput("svn_username", { required: true });
-		const svn_password = core.getInput("svn_password", { required: true });
-		const nexus_username = core.getInput("nexus_username", { required: true });
-		const nexus_password = core.getInput("nexus_password", { required: true });
-		let publish = core.getBooleanInput("publish");
-
-		// import signing key into gpg and get it's key id
-		let gpg_import_stdout = ""
-		await exec("gpg", ["--batch", "--import", "--import-options", "import-show"], {
-			input: Buffer.from(gpg_signing_key),
-			listeners: {
-				stdout: (data) => { gpg_import_stdout += data.toString(); }
-			}
-		});
-		const gpg_signing_key_id = gpg_import_stdout.match("[0-9A-Z]{40}")[0];
-		console.info("Using gpgp key id: " + gpg_signing_key_id);
-
-		// tags must be signed with a committers key, download and import committer
-		// keys for verification later
-		let committer_keys = "";
-		await exec("curl", [`https://downloads.apache.org/${ tlp_dir }/KEYS`], {
-			silent: true,
-			listeners: {
-				stdout: (data) => { committer_keys += data.toString(); }
-			}
-		});
-		await exec("gpg", ["--batch", "--import"], {
-			input: Buffer.from(committer_keys)
-		});
+		const publish = core.getBooleanInput("publish");
 
 		// get the actual project version, this requires a 'VERSION' file at
 		// the root of the repository
 		const project_version = fs.readFileSync("VERSION").toString().trim();
+		const is_snapshot = project_version.includes("-SNAPSHOT");
+		const is_apache = process.env.GITHUB_REPOSITORY_OWNER == "apache";
+		const gitTagPrefix = "refs/tags/";
+		const is_tagged = github.context.eventName == "push" && github.context.ref.startsWith(gitTagPrefix);
+		// The publish setting must be explicitly set to true to actually publish artifacts. Note that
+		// this is required but not sufficient as even if this setting is true, a number of other factors (usually
+		// related to testing) can disable publishing (e.g. non-tagged, snapshot build, non-ASF repository)
+		const do_publish = publish && is_tagged && !is_snapshot && is_apache
+
+		if (!do_publish) {
+			core.warning("Publishing disabled:")
+			if (!publish) core.warning("- Published releases must set the 'publish' setting to 'true'")
+			if (!is_tagged) core.warning("- Published releases must be triggered via a tag")
+			if (is_snapshot) core.warning("- Published releases must have non-snapshot versions")
+			if (!is_apache) core.warning("- Published releases must come from an ASF repository")
+		}
+
+		// we only require the gpg_singing_key if we are actually going to publish artifacts. If it is
+		// not required and not provided, we generate a temporary key so the workflow can still
+		// sign artifacts
+		const gpg_signing_key = core.getInput("gpg_signing_key", {required: do_publish});
+		if (gpg_signing_key.trim() === "") {
+			// Generate keypair (non-interactive)
+			await exec("gpg", ["--batch", "--yes", "--passphrase", '', "--quick-generate-key",
+				"Apache Daffodil Test Release <dev@daffodil.apache.org>" , "default", "default", "1d"], {
+				silent: true
+			});
+		} else {
+			// import signing key into gpg
+			await exec("gpg", ["--batch", "--import", "--import-options", "import-show"], {
+				input: Buffer.from(gpg_signing_key)
+			});
+		}
+
+		// Capture the key id of the most recent generated/imported key
+		let gpg_list_secret_keys_stdout = "";
+		await exec("gpg", ["--list-secret-keys", "--with-colons"], {
+			silent: true,
+			listeners: {
+				stdout: (data) => {
+					gpg_list_secret_keys_stdout += data.toString();
+				}
+			}
+		});
+		const gpg_signing_key_id = gpg_list_secret_keys_stdout
+			.split('\n')
+			.findLast(l => l.startsWith("fpr"))
+			.split(':')[9];
+
+		console.info("Using gpgp key id: " + gpg_signing_key_id);
 
 		// figure out the release version. This should follow the pattern
 		// 'v<VERSION>-rcX', where <VERSION> is the value from the VERSION file
-		const gitTagPrefix = "refs/tags/";
 		let release_version = "";
-		if (github.context.eventName == "push" && github.context.ref.startsWith(gitTagPrefix)) {
+		if (is_tagged) {
 			// this was triggered by the push of a tag, the tag name will be the
 			// version used
 			release_version = github.context.ref.slice(gitTagPrefix.length);
@@ -31908,29 +31928,32 @@ async function run() {
 			// triggered from a tag, so we fetch it manually so we can verify its tag
 			await exec("git", ["fetch", "origin", "--deepen=1", `+${ github.context.ref }:${ github.context.ref }`]);
 
-			// make sure the tag is signed by a committer in the KEYS file, this
-			// command fails if the tag does not verify.
-			await exec("git", ["tag", "--verify", release_version]);
+			if (do_publish) {
+				// if publishing, tags must be signed with a committers key, download and import committer
+				// keys for verification
+				let committer_keys = "";
+				await exec("curl", [`https://downloads.apache.org/${tlp_dir}/KEYS`], {
+					silent: true,
+					listeners: {
+						stdout: (data) => {
+							committer_keys += data.toString();
+						}
+					}
+				});
+				await exec("gpg", ["--batch", "--import"], {
+					input: Buffer.from(committer_keys)
+				});
+
+				// make sure the tag is signed by a committer in the KEYS file, this
+				// command fails if the tag does not verify.
+				await exec("git", ["tag", "--verify", release_version]);
+			}
 		} else {
-			// this was not triggered by a tag, maybe is was manually triggered via
-			// workflow_dispatch or a normal commit. We should only publish from tags,
-			// so we disable publishing. We also set the release_version so that it has the
+			// this was not triggered by a tag, maybe it was manually triggered via
+			// workflow_dispatch or a normal commit. We also set the release_version so that it has the
 			// same format as a tag (e.g. v1.2.3-rc1)
-			core.warning("Action not triggered from tag, publishing disabled");
 			release_version = `v${ project_version }-rc0`;
-			publish = false;
 		}
-
-		const is_snapshot = project_version.includes("-SNAPSHOT");
-
-		// disable publishing for snapshot builds or non-ASF builds. Note that
-		// publishing could still be disabled if the publish input was explicitly set
-		// to false
-		if (publish && (is_snapshot || process.env.GITHUB_REPOSITORY_OWNER != "apache")) {
-			core.warning("Publishing disabled for snapshot versions and from non-apache repositories");
-			publish = false;
-		}
-
 		// the name of the directory where we store release artifacts doesn't actually
 		// matter since it is never published anywhere. The one time where this isn't true
 		// is if publishing is disabled, in which case this directory is made available as
@@ -31950,14 +31973,41 @@ async function run() {
 		fs.appendFileSync(`${ sbt_dir }/plugins/build.sbt`, 'addSbtPlugin("com.github.sbt" % "sbt-pgp" % "2.1.2")\n');
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, `pgpSigningKey := Some("${ gpg_signing_key_id }")\n`);
 
-		// enable SBT for publishing SBOM
+		// enable SBT for publishing SBOM either locally or remotely
 		fs.appendFileSync(`${ sbt_dir }/plugins/build.sbt`, 'addSbtPlugin("com.github.sbt" %% "sbt-sbom" % "0.4.0")\n');
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'bomFormat := "xml"\n');
 
-		if (publish) {
+		if (do_publish) {
+			// if publishing is enabled, we must configure sbt to write to a config file for
+			// post to read from
+			const svn_username = core.getInput("svn_username", { required: true });
+			const svn_password = core.getInput("svn_password", { required: true });
+
+			// Create the default config directory if it doesn't exist
+			const svn_config_dir = `${ os.homedir }/.subversion`;
+			fs.mkdirSync(`${ svn_config_dir }`, { recursive: true });
+
+			// Write to/Overwrite the 'servers' file inside it
+			const servers_file = path.join(svn_config_dir, 'servers');
+			const servers_content = `
+[global]
+store-plaintext-passwords = yes
+store-plaintext-creds = yes
+
+[groups]
+default = *
+
+[default]
+username = ${svn_username}
+password = ${svn_password}
+`;
+			fs.writeFileSync(servers_file, servers_content.trim(), { mode: 0o600 });
+
 			// if publishing is enabled, publishing to the apache staging repository
 			// with the provided credentials. We must diable gigahorse since that fails
 			// to publish on some systems
+			const nexus_username = core.getInput("nexus_username", { required: true });
+			const nexus_password = core.getInput("nexus_password", { required: true });
 			fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'ThisBuild / updateOptions := updateOptions.value.withGigahorse(false)\n');
 			fs.appendFileSync(`${ sbt_dir }/build.sbt`, `ThisBuild / credentials += Credentials("Sonatype Nexus Repository Manager", "repository.apache.org", "${ nexus_username }", "${ nexus_password }")\n`);
 			fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'ThisBuild / publishTo := Some("Apache Staging Distribution Repository" at "https://repository.apache.org/service/local/staging/deploy/maven2")\n');
@@ -32017,7 +32067,7 @@ async function run() {
 		// export state information for the post step
 		core.saveState("artifact_dir", artifact_dir);
 		core.saveState("gpg_signing_key_id", gpg_signing_key_id);
-		core.saveState("publish", publish);
+		core.saveState("do_publish", do_publish);
 		core.saveState("release_version", release_version);
 
 	} catch (error) {
