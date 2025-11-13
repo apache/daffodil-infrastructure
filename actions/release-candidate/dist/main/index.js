@@ -31848,7 +31848,7 @@ const fs = __nccwpck_require__(9896);
 const os = __nccwpck_require__(857);
 const core = __nccwpck_require__(7484);
 const github = __nccwpck_require__(3228);
-const { exec } = __nccwpck_require__(5236);
+const { exec, getExecOutput } = __nccwpck_require__(5236);
 const crypto = __nccwpck_require__(6982);
 
 async function run() {
@@ -31896,21 +31896,15 @@ async function run() {
 		}
 
 		// Capture the key id of the most recent generated/imported key
-		let gpg_list_secret_keys_stdout = "";
-		await exec("gpg", ["--list-secret-keys", "--with-colons"], {
-			silent: true,
-			listeners: {
-				stdout: (data) => {
-					gpg_list_secret_keys_stdout += data.toString();
-				}
-			}
+		const gpg_list_output = await getExecOutput("gpg", ["--list-secret-keys", "--with-colons"], {
+			silent: true
 		});
-		const gpg_signing_key_id = gpg_list_secret_keys_stdout
+		const gpg_signing_key_id = gpg_list_output.stdout
 			.split('\n')
 			.findLast(l => l.startsWith("fpr"))
 			.split(':')[9];
 
-		console.info("Using gpgp key id: " + gpg_signing_key_id);
+		console.info("Using gpg key id: " + gpg_signing_key_id);
 
 		// figure out the release version. This should follow the pattern
 		// 'v<VERSION>-rcX', where <VERSION> is the value from the VERSION file
@@ -31932,17 +31926,11 @@ async function run() {
 			if (do_publish) {
 				// if publishing, tags must be signed with a committers key, download and import committer
 				// keys for verification
-				let committer_keys = "";
-				await exec("curl", [`https://downloads.apache.org/${tlp_dir}/KEYS`], {
-					silent: true,
-					listeners: {
-						stdout: (data) => {
-							committer_keys += data.toString();
-						}
-					}
+				const curl_output = await getExecOutput("curl", [`https://downloads.apache.org/${tlp_dir}/KEYS`], {
+					silent: true
 				});
 				await exec("gpg", ["--batch", "--import"], {
-					input: Buffer.from(committer_keys)
+					input: Buffer.from(curl_output.stdout)
 				});
 
 				// make sure the tag is signed by a committer in the KEYS file, this
@@ -32056,12 +32044,8 @@ async function run() {
 		await exec("git", ["archive", "--format=zip", `--prefix=${ src_artifact_name }/`, "--output", `${ src_artifact_dir }/${ src_artifact_name }.zip`, "HEAD"]);
 
 		// get the reproducible build epoch
-		let source_date_epoch = "";
-		await exec("git", ["show", "--no-patch", "--format=%ct", "HEAD"], {
-			listeners: {
-				stdout: (data) => { source_date_epoch += data.toString().trim(); }
-			}
-		});
+		const git_show_output = await getExecOutput("git", ["show", "--no-patch", "--format=%ct", "HEAD"]);
+		const source_date_epoch = git_show_output.stdout.trim()
 
 		// we are done with all the filesystem setup, we now export environment
 		// variables, output variables, and state needed by the post script

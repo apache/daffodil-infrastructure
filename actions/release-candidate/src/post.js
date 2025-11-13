@@ -19,7 +19,7 @@ const fs = require("fs");
 const os = require("os");
 const core = require("@actions/core");
 const { DefaultArtifactClient } = require('@actions/artifact')
-const { exec } = require('@actions/exec');
+const { exec, getExecOutput } = require('@actions/exec');
 
 // Sign and publish all release artifacts. If publishing is disabled, we just
 // upload all the release candidate artifacts as GitHub workflow artifacts.
@@ -42,14 +42,10 @@ async function run() {
 				if (artifact.name.endsWith(".rpm")) {
 					await exec("rpmsign", ["--define", `_gpg_name ${ gpg_signing_key_id }`, "--define", "_binary_filedigest_algorithm 10", "--addsign", `${ artifact.parentPath }/${ artifact.name }`]);
 				}
-				let checksum = "";
-				await exec("sha512sum", ["--binary", artifact.name], {
-					cwd: artifact.parentPath,
-					listeners: {
-						stdout: (data) => { checksum += data.toString(); }
-					}
+				const shasum_output = await getExecOutput("sha512sum", ["--binary", artifact.name], {
+					cwd: artifact.parentPath
 				});
-				fs.appendFileSync(`${ artifact.parentPath }/${ artifact.name }.sha512`, checksum);
+				fs.appendFileSync(`${ artifact.parentPath }/${ artifact.name }.sha512`, shasum_output.stdout);
 				await exec("gpg", ["--default-key", gpg_signing_key_id, "--batch", "--yes", "--detach-sign", "--armor", "--output", `${ artifact.name }.asc`, artifact.name], {
 					cwd: artifact.parentPath
 				});
@@ -70,16 +66,10 @@ async function run() {
 			const public_key_file = `${ release_dir }/public-key.asc`;
 			// if publishing is disabled, store public key as artifact so it can be downloaded
 			// by the post step for verification
-			let public_key = "";
-			await exec("gpg", ["--armor", "--export", gpg_signing_key_id], {
-				silent: true,
-				listeners: {
-					stdout: (data) => {
-						public_key +=  data.toString();
-					}
-				}
+			const gpg_export_output = await getExecOutput("gpg", ["--armor", "--export", gpg_signing_key_id], {
+				silent: true
 			});
-			fs.appendFileSync(`${ public_key_file }`, public_key);
+			fs.appendFileSync(`${ public_key_file }`, gpg_export_output.stdout);
 
 			const svn_artifacts = fs.readdirSync(artifact_dir, { recursive: true, withFileTypes: true });
 			const maven_artifacts = fs.readdirSync(`${ release_dir }/maven-local`, { recursive: true, withFileTypes: true });
