@@ -31988,7 +31988,7 @@ async function run() {
 			fs.mkdirSync(`${ svn_config_dir }`, { recursive: true });
 
 			// Write to/Overwrite the 'servers' file inside it
-			const servers_file = path.join(svn_config_dir, 'servers');
+			const servers_file = `${ svn_config_dir }/servers`;
 			const servers_content = `
 [global]
 store-plaintext-passwords = yes
