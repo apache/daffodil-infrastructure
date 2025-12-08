@@ -20,6 +20,7 @@ const os = require("os");
 const core = require("@actions/core");
 const github = require("@actions/github");
 const { exec } = require('@actions/exec');
+const crypto = require("crypto");
 
 async function run() {
 	try {
@@ -139,7 +140,7 @@ async function run() {
 		// sbt-pgp plugin version should not be updated unless there is a
 		// compelling reason. Release signing has been known to break with newer
 		// versions.
-		const sbt_dir = `${ os.homedir }/.sbt/1.0`
+		const sbt_dir = `${ os.homedir() }/.sbt/1.0`
 		fs.mkdirSync(`${ sbt_dir }/plugins`, { recursive: true });
 		fs.appendFileSync(`${ sbt_dir }/plugins/build.sbt`, 'addSbtPlugin("com.github.sbt" % "sbt-pgp" % "2.1.2")\n');
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, `pgpSigningKey := Some("${ gpg_signing_key_id }")\n`);
@@ -149,34 +150,41 @@ async function run() {
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'bomFormat := "xml"\n');
 
 		if (do_publish) {
-			// if publishing is enabled, we must configure sbt to write to a config file for
-			// post to read from
+			// if publishing is enabled, we configure SVN and SBT so future commands and
+			// workflow tasks can publish artifacts without needing to pass in
+			// credentials/repositories/etc.
+
+			// svn has a custom format for storing auth credentials, which can be created
+			// using an official script they provide:
+			//
+			//   https://svn.apache.org/repos/asf/subversion/trunk/tools/client-side/store-plaintext-password.py
+			//
+			// But instead of trying to download and use that script, we simply
+			// reimplement the core logic below
 			const svn_username = core.getInput("svn_username", { required: true });
 			const svn_password = core.getInput("svn_password", { required: true });
+			const svn_realm = "<https://dist.apache.org:443> ASF Committers";
 
-			// Create the default config directory if it doesn't exist
-			const svn_config_dir = `${ os.homedir }/.subversion`;
-			fs.mkdirSync(`${ svn_config_dir }`, { recursive: true });
+			const svn_realm_id = crypto.createHash("md5").update(svn_realm).digest("hex");
+			const svn_auth_dir = `${ os.homedir() }/.subversion/auth/svn.simple/`;
+			const svn_auth_file = `${ svn_auth_dir }/${ svn_realm_id }`;
+			const svn_auth_content = {
+				'svn:realmstring': svn_realm,
+				'username': svn_username,
+				'passtype': 'simple',
+				'password': svn_password
+			};
+			fs.mkdirSync(svn_auth_dir, { recursive: true });
+			fs.writeFileSync(svn_auth_file, '');
+			for (const [key, value] of Object.entries(svn_auth_content)) {
+				fs.appendFileSync(svn_auth_file, `K ${ key.length }\n${ key }\n`);
+				fs.appendFileSync(svn_auth_file, `V ${ value.length }\n${ value }\n`);
+			}
+			fs.appendFileSync(svn_auth_file, 'END\n');
 
-			// Write to/Overwrite the 'servers' file inside it
-			const servers_file = `${ svn_config_dir }/servers`;
-			const servers_content = `
-[global]
-store-plaintext-passwords = yes
-store-plaintext-creds = yes
-
-[groups]
-default = *
-
-[default]
-username = ${svn_username}
-password = ${svn_password}
-`;
-			fs.writeFileSync(servers_file, servers_content.trim(), { mode: 0o600 });
-
-			// if publishing is enabled, publishing to the apache staging repository
-			// with the provided credentials. We must diable gigahorse since that fails
-			// to publish on some systems
+			// configure SBT to publish to the apache staging repository with the provided
+			// credentials. We must disable gigahorse since that fails to publish on some
+			// systems
 			const nexus_username = core.getInput("nexus_username", { required: true });
 			const nexus_password = core.getInput("nexus_password", { required: true });
 			fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'ThisBuild / updateOptions := updateOptions.value.withGigahorse(false)\n');
