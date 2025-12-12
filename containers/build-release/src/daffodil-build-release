@@ -38,30 +38,36 @@ export CC=clang
 export AR=llvm-ar
 export SOURCE_DATE_EPOCH=$(git show --no-patch --format=%ct HEAD)
 
-echo "Select a project: "
-select PROJECT in daffodil daffodil-sbt daffodil-vscode; do
-  if [[ -n "$PROJECT" ]]
-  then
-    break;
-  fi
-  echo "invalid choice, select again"
-done
-
-echo
-
-read -p "Pre-release label (e.g. rc1 to rc99) or empty for final release: " PRE_RELEASE_LABEL
-echo
-
-# determine the release version. If the pre-release label is not empty or all
-# whitespace, then append it to the project version. Otherwise we just build
-# without a pre-release label. This is potential useful for verifying
-# reproducible builds for final releases
-PROJECT_VERSION=$(cat VERSION)
-if [[ ! $PRE_RELEASE_LABEL =~ ^[\s]*$ ]]
+if [[ "$#" -lt 1 || "$#" -gt 2 ]]
 then
-  RELEASE_VERSION=$PROJECT_VERSION-$PRE_RELEASE_LABEL
+    echo "Error: Incorrect number of arguments provided." >&2
+    echo "Usage: $0 <project-name> [pre-release-label]" >&2
+    exit 1
+fi
+
+PROJECT="$1"
+if [[ ! $PROJECT =~ ^daffodil(-sbt|-vscode)?$ ]]
+then
+    echo "Error: Invalid project name. Must be daffodil, daffodil-sbt, or daffodil-vscode, but was $PROJECT" >&2
+    exit 1
+fi
+
+# determine the release version. If a pre-release label was provided, then append
+# it to the project version. Otherwise we just build without a pre-release
+# label. This is potentially useful for verifying reproducible builds for final
+# releases
+PROJECT_VERSION=$(cat VERSION)
+if [[ "$#" -eq 2 ]]
+then
+    PRE_RELEASE_LABEL="$2"
+    if [[ ! $PRE_RELEASE_LABEL =~ ^rc[0-9]+$ ]]
+    then
+        echo "Error: Invalid pre-release label. Must be rcX, but was $PRE_RELEASE_LABEL" >&2
+        exit 1
+    fi
+    RELEASE_VERSION=$PROJECT_VERSION-$PRE_RELEASE_LABEL
 else
-  RELEASE_VERSION=$PROJECT_VERSION
+    RELEASE_VERSION=$PROJECT_VERSION
 fi
 
 echo "==== Building artifacts for $PROJECT $RELEASE_VERSION ===="
