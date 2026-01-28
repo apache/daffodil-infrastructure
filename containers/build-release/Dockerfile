@@ -39,7 +39,6 @@ RUN \
     libmxml-dev \
     llvm \
     npm \
-    openjdk-8-jdk-headless \
     openjdk-17-jdk-headless \
     rpm \
     unzip \
