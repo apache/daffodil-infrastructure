@@ -107,7 +107,7 @@ case $PROJECT in
     ;;
 
   "daffodil-sbt")
-    set_java_version 8
+    set_java_version 17
     sbt \
       "^compile" \
       "^publish"
