@@ -15,102 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if [[ "$#" -lt "2" || "$#" -gt 3 ]]
-then
-	echo "error: incorrect number of arguments" >&2
-	echo "Usage: $0 <DIST_URL> <MAVEN_URL> [LOCAL_RELEASE_DIR]" >&2
-	exit 1
-fi
-
-download_dir() {
-	# force a trailing slash by removing a slash it if exists and then adding
-	# it back. This is required for maven URLs to download the right thing--it
-	# doesn't matter either way for dist urls
-	URL="${1%/}/"
-	# non-greedily delete the schema and domain part of the URL, giving just
-	# the path part
-	URL_PATH="${URL#*://*/}"
-	# we want to use --cut-dirs to ignore all directories but the final target
-	# directory. This number is different depending on the URL, so we extract
-	# and count the nubmer of slash-separated fields of the url path and
-	# subtract 2 (one because we want to keep the last field, and one because
-	# there is an extra field because the path ends in a slash)
-	CUT_DIRS=$(echo "$URL_PATH" | awk -F/ '{print NF - 2}')
-	wget \
-		--recursive \
-		--level=inf \
-		-e robots=off \
-		--no-parent \
-		--no-host-directories \
-		--reject=index.html,robots.txt \
-		--cut-dirs=$CUT_DIRS \
-		"$URL"
-
-	# wget on some systems (e.g. Ubuntu 22.04) leaves behind .tmp files used
-	# when downloading files, likely related to --reject=index.html. Delete
-	# those if they exist.
-	find "$(basename "$URL")" -name '*.tmp' -delete
-}
-
-# URL of release candidate directory in dist/dev, e.g. https://dist.apache.org/repos/dist/dev/daffodil/1.0.0-rc1
-DIST_URL=$1
-
-# URL of maven staging repository, e.g. https://repository.apache.org/content/repositories/orgapachedaffodil-1234
-MAVEN_URL=$2
-
-# optional path to release directory built by running the daffodil-build-release
-# container. If not provided, only signature/checksum checks are done
-LOCAL_RELEASE_DIR=$3
-
-require_command() {
-	command -v "$1" &> /dev/null || { echo "error: command $1 not found in PATH"; exit 1; }
-}
-
-# error early if needed tools are missing
-require_command cmp
-require_command gpg
-require_command md5sum
-require_command rpm
-require_command sha1sum
-require_command sha512sum
-require_command wget
-
-
-RELEASE_DIR=release-download
-DIST_DIR=$RELEASE_DIR/asf-dist
-MAVEN_DIR=$RELEASE_DIR/maven-local
-
-
-if [ ! -d "$RELEASE_DIR" ]
-then
-	printf "\n==== Downloading Release Files ====\n"
-
-	# download dist/dev/ files
-	mkdir -p $DIST_DIR
-	pushd $DIST_DIR &>/dev/null
-	download_dir $DIST_URL
-	popd &>/dev/null
-
-	# download maven repository, delete nexus generated files, and remove the
-	# orgapachedaffodil-1234 dir since the build-release container does not have
-	# this directory
-	if [ -n "$MAVEN_URL" ]
-	then
-		mkdir -p $MAVEN_DIR
-		pushd $MAVEN_DIR &>/dev/null
-		download_dir $MAVEN_URL
-		find . -type f \( -name 'archetype-catalog.xml' -o -name 'maven-metadata.xml*' \) -delete
-		REPO_DIR=(*/)
-		mv $REPO_DIR/* .
-		rmdir $REPO_DIR
-		popd &>/dev/null
-	fi
-
-	printf "\n==== Download Complete ====\n"
-else
-	printf "\n==== Skipping Download, release-download/ directory already exists ====\n"
-fi
-
 RED="\x1b[31m"
 GREEN="\033[32m"
 YELLOW="\033[33m"
@@ -174,6 +78,119 @@ print_result() {
 	[ $RC -eq 0 ] && echo -ne "$PASS" || echo -ne "$FAIL"
 	echo " $MESSAGE"
 }
+
+download_dir() {
+	# force a trailing slash by removing a slash it if exists and then adding
+	# it back. This is required for maven URLs to download the right thing--it
+	# doesn't matter either way for dist urls
+	URL="${1%/}/"
+	# non-greedily delete the schema and domain part of the URL, giving just
+	# the path part
+	URL_PATH="${URL#*://*/}"
+	# we want to use --cut-dirs to ignore all directories but the final target
+	# directory. This number is different depending on the URL, so we extract
+	# and count the nubmer of slash-separated fields of the url path and
+	# subtract 2 (one because we want to keep the last field, and one because
+	# there is an extra field because the path ends in a slash)
+	CUT_DIRS=$(echo "$URL_PATH" | awk -F/ '{print NF - 2}')
+	wget \
+		--recursive \
+		--level=inf \
+		-e robots=off \
+		--no-parent \
+		--no-host-directories \
+		--reject=index.html,robots.txt \
+		--cut-dirs=$CUT_DIRS \
+		"$URL"
+
+	RC=$?
+	if [ $RC -ne 0 ]; then
+		print_result $RC "Failed to download URL: $URL" >&2
+		exit 1
+	fi
+
+	# wget on some systems (e.g. Ubuntu 22.04) leaves behind .tmp files used
+	# when downloading files, likely related to --reject=index.html. Delete
+	# those if they exist.
+	find "$(basename "$URL")" -name '*.tmp' -delete
+}
+
+
+usage() {
+	echo "Usage: $0 <DIST_URL> <MAVEN_URL> [LOCAL_RELEASE_DIR]" >&2
+}
+
+if [[ "$#" -lt "2" || "$#" -gt 3 ]]
+then
+	echo "error: incorrect number of arguments" >&2
+	usage
+	exit 1
+fi
+
+# URL of release candidate directory in dist/dev, e.g. https://dist.apache.org/repos/dist/dev/daffodil/1.0.0-rc1
+DIST_URL=$1
+if [ -z "$DIST_URL" ]
+then
+  echo "error: DIST_URL parameter must not be empty" >&2
+  usage
+  exit 1
+fi
+
+# URL of maven staging repository, e.g. https://repository.apache.org/content/repositories/orgapachedaffodil-1234
+MAVEN_URL=$2
+
+# optional path to release directory built by running the daffodil-build-release
+# container. If not provided, only signature/checksum checks are done
+LOCAL_RELEASE_DIR=$3
+
+require_command() {
+	command -v "$1" &> /dev/null || { echo "error: command $1 not found in PATH"; exit 1; }
+}
+
+# error early if needed tools are missing
+require_command cmp
+require_command gpg
+require_command md5sum
+require_command rpm
+require_command sha1sum
+require_command sha512sum
+require_command wget
+
+
+RELEASE_DIR=release-download
+DIST_DIR=$RELEASE_DIR/asf-dist
+MAVEN_DIR=$RELEASE_DIR/maven-local
+
+
+if [ ! -d "$RELEASE_DIR" ]
+then
+	printf "\n==== Downloading Release Files ====\n"
+
+	# download dist/dev/ files
+	mkdir -p $DIST_DIR
+	pushd $DIST_DIR &>/dev/null
+	download_dir $DIST_URL
+	popd &>/dev/null
+
+	# download maven repository, delete nexus generated files, and remove the
+	# orgapachedaffodil-1234 dir since the build-release container does not have
+	# this directory
+	if [ -n "$MAVEN_URL" ]
+	then
+		mkdir -p $MAVEN_DIR
+		pushd $MAVEN_DIR &>/dev/null
+		download_dir $MAVEN_URL
+		find . -type f \( -name 'archetype-catalog.xml' -o -name 'maven-metadata.xml*' \) -delete
+		REPO_DIR=(*/)
+		mv $REPO_DIR/* .
+		rmdir $REPO_DIR
+		popd &>/dev/null
+	fi
+
+	printf "\n==== Download Complete ====\n"
+else
+	printf "\n==== Skipping Download, release-download/ directory already exists ====\n"
+fi
 
 printf "\n==== Dist SHA512 Checksum ====\n"
 test_files <(find "$DIST_DIR" -type f ! -name '*.sha512' ! -name '*.asc') <<-'CMD'
