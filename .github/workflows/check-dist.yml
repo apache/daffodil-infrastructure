@@ -30,6 +30,8 @@ jobs:
 
   check-dist:
     runs-on: ubuntu-22.04
+    strategy:
+      max-parallel: 1
 
     steps:
 
