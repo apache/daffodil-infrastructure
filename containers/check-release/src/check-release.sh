@@ -87,48 +87,46 @@ download_dir() {
 	# non-greedily delete the schema and domain part of the URL, giving just
 	# the path part
 	URL_PATH="${URL#*://*/}"
-	# we want to use --cut-dirs to ignore all directories but the final target
-	# directory. This number is different depending on the URL, so we extract
-	# and count the nubmer of slash-separated fields of the url path and
-	# subtract 2 (one because we want to keep the last field, and one because
-	# there is an extra field because the path ends in a slash)
-	CUT_DIRS=$(echo "$URL_PATH" | awk -F/ '{print NF - 2}')
-	wget \
-		--recursive \
-		--level=inf \
-		-e robots=off \
-		--no-parent \
-		--no-host-directories \
-		--reject=index.html,robots.txt \
-		--cut-dirs=$CUT_DIRS \
-		"$URL"
 
+	# loop through the filter path parameter, path step by path step, to build
+	# up a list of --include-glob options to provide to lftp. This is necessary
+	# to prevent lftp from traversing and mirroring directories that we don't
+	# need. This is especially useful when downloading releases from
+	# non-staging ASF or maven repositories. Defaults to * if not provided
+	FILTER_PATH="${2:-*}"
+	INCLUDE_GLOBS=""
+	CURRENT_PATH=""
+	IFS='/' read -ra STEPS <<< "$FILTER_PATH"
+	for STEP in "${STEPS[@]}"; do
+		CURRENT_PATH="${CURRENT_PATH:+$CURRENT_PATH/}$STEP"
+		INCLUDE_GLOBS+="--include-glob=$CURRENT_PATH --include-glob=$CURRENT_PATH/ "
+	done
+
+	lftp -c "mirror --parallel --no-empty-dirs --exclude-glob=* $INCLUDE_GLOBS $URL"
 	RC=$?
 	if [ $RC -ne 0 ]; then
 		print_result $RC "Failed to download URL: $URL" >&2
 		exit 1
 	fi
-
-	# wget on some systems (e.g. Ubuntu 22.04) leaves behind .tmp files used
-	# when downloading files, likely related to --reject=index.html. Delete
-	# those if they exist.
-	find "$(basename "$URL")" -name '*.tmp' -delete
 }
 
 
 usage() {
-	echo "Usage: $0 <DIST_URL> <MAVEN_URL> [LOCAL_RELEASE_DIR]" >&2
+	echo "Usage: $0 <VERSION> <DIST_URL> <MAVEN_URL> [LOCAL_RELEASE_DIR]" >&2
 }
 
-if [[ "$#" -lt "2" || "$#" -gt 3 ]]
+if [[ "$#" -lt "3" || "$#" -gt 4 ]]
 then
 	echo "error: incorrect number of arguments" >&2
 	usage
 	exit 1
 fi
 
+# Version to check the release for
+VERSION=$1
+
 # URL of release candidate directory in dist/dev, e.g. https://dist.apache.org/repos/dist/dev/daffodil/1.0.0-rc1
-DIST_URL=$1
+DIST_URL=$2
 if [ -z "$DIST_URL" ]
 then
   echo "error: DIST_URL parameter must not be empty" >&2
@@ -136,12 +134,12 @@ then
   exit 1
 fi
 
-# URL of maven staging repository, e.g. https://repository.apache.org/content/repositories/orgapachedaffodil-1234
-MAVEN_URL=$2
+# URL of maven repository, e.g. https://repository.apache.org/content/repositories/orgapachedaffodil-1234
+MAVEN_URL=$3
 
 # optional path to release directory built by running the daffodil-build-release
 # container. If not provided, only signature/checksum checks are done
-LOCAL_RELEASE_DIR=$3
+LOCAL_RELEASE_DIR=$4
 
 require_command() {
 	command -v "$1" &> /dev/null || { echo "error: command $1 not found in PATH"; exit 1; }
@@ -154,7 +152,7 @@ require_command md5sum
 require_command rpm
 require_command sha1sum
 require_command sha512sum
-require_command wget
+require_command lftp
 
 
 RELEASE_DIR=release-download
@@ -162,34 +160,32 @@ DIST_DIR=$RELEASE_DIR/asf-dist
 MAVEN_DIR=$RELEASE_DIR/maven-local
 
 
+printf "\n==== Downloading Release Files ====\n"
 if [ ! -d "$RELEASE_DIR" ]
 then
-	printf "\n==== Downloading Release Files ====\n"
-
 	# download dist/dev/ files
-	mkdir -p $DIST_DIR
-	pushd $DIST_DIR &>/dev/null
-	download_dir $DIST_URL
+	mkdir -p "$DIST_DIR"
+	pushd "$DIST_DIR" &>/dev/null
+	download_dir "$DIST_URL"
 	popd &>/dev/null
 
-	# download maven repository, delete nexus generated files, and remove the
-	# orgapachedaffodil-1234 dir since the build-release container does not have
-	# this directory
+	# download artifacts from the maven repository, and remove the root
+	# directory (e.g. orgapachedaffodil-1234) since the build-release container
+	# does not have this directory
 	if [ -n "$MAVEN_URL" ]
 	then
-		mkdir -p $MAVEN_DIR
-		pushd $MAVEN_DIR &>/dev/null
-		download_dir $MAVEN_URL
-		find . -type f \( -name 'archetype-catalog.xml' -o -name 'maven-metadata.xml*' \) -delete
+		mkdir -p "$MAVEN_DIR"
+		pushd "$MAVEN_DIR" &>/dev/null
+		download_dir "$MAVEN_URL" "org/apache/daffodil/*/$VERSION/*"
 		REPO_DIR=(*/)
-		mv $REPO_DIR/* .
-		rmdir $REPO_DIR
+		mv "$REPO_DIR"/* .
+		rmdir "$REPO_DIR"
 		popd &>/dev/null
 	fi
 
-	printf "\n==== Download Complete ====\n"
+	echo -e "$PASS download complete"
 else
-	printf "\n==== Skipping Download, release-download/ directory already exists ====\n"
+	echo -e "$WARN skipping download, release-download/ directory already exists"
 fi
 
 printf "\n==== Dist SHA512 Checksum ====\n"
