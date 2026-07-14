@@ -26,21 +26,28 @@ To build or update the build release container image:
 
     podman build -t daffodil-build-release containers/build-release/
 
-To use the container image to build a release, run the following from the root
-of the project git repository, replacing `<REPO_DIR>` with the path to the git
-repository of the project to build and `<ARTIFACT_DIR>` with the directory
-where you want the artifacts saved:
+To use the container image to build a release, run:
 
-    podman run -it --rm \
-      --hostname daffodil.build \
-      --volume <REPO_DIR>:/project:O \
-      --volume <ARTIFACT_DIR>:/artifacts \
-      daffodil-build-release
+```
+podman run -it --rm \
+  --hostname daffodil.build \
+  --volume <REPO_DIR>:/project:O \
+  --volume <ARTIFACT_DIR>:/artifacts \
+  daffodil-build-release <PROJECT_NAME> <PRE_RELEASE_LABEL>
+```
+
+Replace the placeholders as follows:
+
+* `<REPO_DIR>` - path to the git repository of the project to build
+* `<ARTIFACT_DIR>` - path to the directory where you want the artifacts saved
+* `<PROJECT_NAME>` - name of the project (e.g. `daffodil`).
+* `<PRE_RELEASE_LABEL>` - label of the release candidate (e.g. `rc1`). This
+  argument is optional and can be left off to build artifacts to compare
+  against a final release
 
 Note that the `<REPO_DIR>` volume uses the `:O` suffix so that changes to the
 repository inside the container do not affect the repository outside the
 container.
 
-When run, the container will ask for an optional pre-release label (e.g. rc1)
-and the project to build. The resulting artifacts will be written to the
+When run, the resulting artifacts will be written to the
 `<ARTIFACT_DIR>/release/` directory.
