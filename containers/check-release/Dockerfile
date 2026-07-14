@@ -19,6 +19,7 @@ RUN \
   apt-get update && \
   apt-get install -qy \
     diffutils \
+    lftp \
     gpg \
     osslsigncode \
     python3-pefile \
