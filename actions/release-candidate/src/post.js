@@ -34,13 +34,27 @@ async function run() {
 		const do_publish = core.getState("do_publish") === "true";
 		const release_version = core.getState("release_version");
 
+		// ssl.com credentials are optional, if not provided we will not sign
+		// exe artifacts. Also, each ssl.com signature costs ASF money, so we
+		// only sign exe artifacts if we are actually going to publish things
+		// (e.g. this isn't a test run)
+		const ssl_com_username = core.getInput("ssl_com_username");
+		const ssl_com_password = core.getInput("ssl_com_password");
+		const ssl_com_secret = core.getInput("ssl_com_secret");
+		const do_ssl_com_sign = do_publish && ssl_com_username;
+
 		// sign/checksum all artifacts
 		const artifacts = fs.readdirSync(artifact_dir, { recursive: true, withFileTypes: true });
 		for(const artifact of artifacts) {
 			if (artifact.isFile()) {
-				// must sign rpms before sha/gpg since rpmsign modifies the RPM
+				// must sign rpms and exes before sha/gpg since rpmsign/jsign modifies the files
 				if (artifact.name.endsWith(".rpm")) {
 					await exec("rpmsign", ["--define", `_gpg_name ${ gpg_signing_key_id }`, "--define", "_binary_filedigest_algorithm 10", "--addsign", `${ artifact.parentPath }/${ artifact.name }`]);
+				}
+				if (artifact.name.endsWith(".exe") && do_ssl_com_sign) {
+					// see https://infra.apache.org/code-signing-use.html for more information
+					const cert_uuid = "d97c5110-c66a-4c0c-ac0c-1cd6af812ee6";
+					await exec("jsign", ["--storetype", "ESIGNER", "--alias", cert_uuid, "--storepass", `${ssl_com_username}|${ssl_com_password}`, "--keypass", ssl_com_secret, "--tsaurl=http://ts.ssl.com", "--tsmode", "RFC3161", "--alg", "SHA512", `${ artifact.parentPath }/${ artifact.name }`]);
 				}
 				const shasum_output = await getExecOutput("sha512sum", ["--binary", artifact.name], {
 					cwd: artifact.parentPath

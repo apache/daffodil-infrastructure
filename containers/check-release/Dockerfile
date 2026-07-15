@@ -20,6 +20,8 @@ RUN \
   apt-get install -qy \
     diffutils \
     gpg \
+    osslsigncode \
+    python3-pefile \
     rpm \
     wget
 
