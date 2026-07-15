@@ -34,6 +34,15 @@ inputs:
   gpg_signing_key:
     description: Key used to sign artifacts
     required: false
+  ssl_com_usename:
+    description: Username for signing .exe artifacts using SSL.com
+    required: false
+  ssl_com_password:
+    description: Password for signing .exe artifacts using SSL.com
+    required: false
+  ssl_com_secret:
+    description: Secret for signing .exe artifacts using SSL.com
+    required: false
   svn_username:
     description: Username for publishing release artifacts to SVN dev/dist
     required: false

@@ -9,7 +9,7 @@ is not intended to be used by all projects.
 * Apache Security Team has approved the project for
   [Automated Release Signing](https://infra.apache.org/release-signing.html#automated-release-signing)
   and INFRA has set secrets for the repository, including a GPG signing key,
-  SVN username/password, and nexus username/password.
+  SVN username/password, nexus username/password, and optionally SSL.com credentials
 * The `runs-on` workflow setting should be Linux based (e.g. `ubuntu-latest`)
 * The repository must be checked out using `actions/checkout` prior to
   triggering this action
@@ -53,9 +53,11 @@ dropped.
 If the workflow job successfully completes, the following actions are performed
 at the end of the workflow:
 
+* Sign all rpm artifacts with the GPG key with rpmsign
+* Sign all exe artifacts with the ssl.com certificates, if publishing is
+  enabled and `ssl_com_username` is defined
 * Create sha512 checksum files for all artifacts
 * Create detached ASCII armored GPG signatures for all artifacts
-* Sign all rpm artifacts with the GPG key with rpmsign
 * Commit all files added to `dist/dev/` to SVN
 
 Note that committing to SVN is is disabled if any of the following are true:
@@ -77,6 +79,9 @@ This is useful for testing the workflow using workflow dispatch.
 | project_id      | yes           |         | ID of the project, used in source artifact file name |
 | project_dir     | no            | ""      | Directory for the project in dev/dist/<tlp_dir>/. Omit if at the root |
 | gpg_signing_key | if publishing |         | Key used to sign artifacts |
+| ssl_com_username| no            |         | Username for signing .exe artifacts using SSL.com |
+| ssl_com_password| no            |         | Password for signing .exe artifacts using SSL.com |
+| ssl_com_secret  | no            |         | Secret for signing .exe artifacts using SSL.com |
 | svn_username    | if publishing |         | Username for publishing release artifacts to SVN dev/dist |
 | svn_password    | if publishing |         | Password for publishing release artifacts to SVN dev/dist |
 | nexus_username  | if publishing |         | Username for publishing release artifacts to Nexus |

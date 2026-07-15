@@ -33019,6 +33019,13 @@ async function run() {
 		fs.appendFileSync(`${ sbt_dir }/plugins/build.sbt`, 'addSbtPlugin("com.github.sbt" %% "sbt-sbom" % "0.4.0")\n');
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'bomFormat := "xml"\n');
 
+		// download and install jsign for signing exe files, ignore dependencies assuming that the
+		// workflow already has java installed or will install java at some point
+		const jsign_version = "7.5";
+		const jsign_deb_path = `${ os.tmpdir() }/jsign_${jsign_version}_all.deb`;
+		await exec("curl", ["-L", "-o", jsign_deb_path, `https://github.com/ebourg/jsign/releases/download/${jsign_version}/jsign_${jsign_version}_all.deb`]);
+		await exec("sudo", ["dpkg", "--ignore-depends=ALL", "--install", jsign_deb_path]);
+
 		if (do_publish) {
 			// if publishing is enabled, we configure SVN and SBT so future commands and
 			// workflow tasks can publish artifacts without needing to pass in
