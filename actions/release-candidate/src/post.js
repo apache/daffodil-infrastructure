@@ -41,7 +41,7 @@ async function run() {
 		const ssl_com_username = core.getInput("ssl_com_username");
 		const ssl_com_password = core.getInput("ssl_com_password");
 		const ssl_com_secret = core.getInput("ssl_com_secret");
-		const do_ssl_com_sign = do_publish && ssl_com_username;
+		const do_ssl_com_sign = ssl_com_username;
 
 		// sign/checksum all artifacts
 		const artifacts = fs.readdirSync(artifact_dir, { recursive: true, withFileTypes: true });
