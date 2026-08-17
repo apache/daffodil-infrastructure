@@ -52,8 +52,9 @@ async function run() {
 				}
 				if (artifact.name.endsWith(".exe") && do_esigner) {
 					// see https://infra.apache.org/code-signing-use.html for more information
+					// note that ssl.com does not suppport SHA512 signature algorithm
 					const cert_uuid = "d97c5110-c66a-4c0c-ac0c-1cd6af812ee6";
-					await exec("jsign", ["--storetype", "ESIGNER", "--alias", cert_uuid, "--storepass", esigner_storepass, "--keypass", esigner_keypass, "--tsaurl=http://ts.ssl.com", "--tsmode", "RFC3161", "--alg", "SHA512", `${ artifact.parentPath }/${ artifact.name }`]);
+					await exec("jsign", ["--storetype", "ESIGNER", "--alias", cert_uuid, "--storepass", esigner_storepass, "--keypass", esigner_keypass, "--tsaurl=http://ts.ssl.com", "--tsmode", "RFC3161", "--alg", "SHA256", `${ artifact.parentPath }/${ artifact.name }`]);
 				}
 				const shasum_output = await getExecOutput("sha512sum", ["--binary", artifact.name], {
 					cwd: artifact.parentPath
