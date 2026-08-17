@@ -297,19 +297,29 @@ else
 
 	# EXE files have an embedded signature which makes reproducibility checking
 	# difficult since locally built EXEs will not have the embedded signature.
-	# However, the EXEs should be identical if we delete the signature. The
-	# only exception to this is the optional header checksum field in the exe
-	# is normally zero when we build it, but tools that add and remove
-	# signatures calculate and embed an actual checksum value. So we remove the
-	# signature using osslsigncode and then using python3-pefile to set that
-	# checksum field to zero. This should make it exactly the same as locally
-	# built files.
+	# We make the following modifications to undo the changes made by signing
+	# so it matches the original file
+	#
+	# 1. Remove the signature using osslsigncode
+	# 2. The optional header checksum field in the exe is normally zero when we
+	#    build it, but the ssl.com esigner recalculates and updates this
+	#    checksum. We use pefile to set it back to the original zero value
+	# 3. The exe signature is appended to the exe file starting at an 8 byte
+	#    alignment. If the original exe did not end on an 8 byte boundary then
+	#    ssl.com esigner appends null padding bytes first. When osslsigncode
+	#    removes the signature, it does not also remove those null padding
+	#    bytes. So we remove up to 7 trailing null bytes, with the assumption
+	#    that they are padding bytes. This could remove real trailing null
+	#    bytes, but that's unlikely in practice, and any resulting false
+	#    negative can be confirmed with a manual diff against a known-good
+	#    reference build.
 	find "$RELEASE_DIR" -name '*.exe' -exec cp --parents '{}' "$BACKUP_DIR" \;
 	while IFS= read -r EXE_PATH
 	do
 		RELEASE_EXE="$RELEASE_DIR/$EXE_PATH"
-		osslsigncode remove-signature -in "$RELEASE_EXE" -out "$RELEASE_EXE.unsigned"
+		osslsigncode remove-signature -in "$RELEASE_EXE" -out "$RELEASE_EXE.unsigned" &>/dev/null
 		python3 -c "import pefile; pe=pefile.PE('$RELEASE_EXE.unsigned'); pe.OPTIONAL_HEADER.CheckSum=0; pe.write('$RELEASE_EXE')"
+		python3 -c "bytes=open('$RELEASE_EXE','rb').read(); open('$RELEASE_EXE','wb').write(bytes[:-7]+bytes[-7:].rstrip(b'\0'))"
 		rm "$RELEASE_EXE.unsigned"
 	done < <(find "$LOCAL_RELEASE_DIR/" -name '*.exe' -printf '%P\n')
 

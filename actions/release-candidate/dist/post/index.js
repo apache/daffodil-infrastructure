@@ -125631,7 +125631,7 @@ async function run() {
 		// (e.g. this isn't a test run)
 		const esigner_storepass = core.getInput("esigner_storepass");
 		const esigner_keypass = core.getInput("esigner_keypass");
-		const do_esigner = esigner_storepass;
+		const do_esigner = do_publish && esigner_storepass;
 
 		// sign/checksum all artifacts
 		const artifacts = fs.readdirSync(artifact_dir, { recursive: true, withFileTypes: true });
