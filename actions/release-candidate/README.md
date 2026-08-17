@@ -55,7 +55,7 @@ at the end of the workflow:
 
 * Sign all rpm artifacts with the GPG key with rpmsign
 * Sign all exe artifacts with the ssl.com certificates, if publishing is
-  enabled and `ssl_com_username` is defined
+  enabled and `esigner_storepass` is defined
 * Create sha512 checksum files for all artifacts
 * Create detached ASCII armored GPG signatures for all artifacts
 * Commit all files added to `dist/dev/` to SVN
@@ -72,21 +72,20 @@ This is useful for testing the workflow using workflow dispatch.
 
 ## Inputs
 
-| Input           | Required      | Default | Description |
-|-----------------|---------------|---------|-------------|
-| tlp_dir         | yes           |         | Directory of the top level project in dist/dev/ |
-| project_name    | yes           |         | Human readable name of the project |
-| project_id      | yes           |         | ID of the project, used in source artifact file name |
-| project_dir     | no            | ""      | Directory for the project in dev/dist/<tlp_dir>/. Omit if at the root |
-| gpg_signing_key | if publishing |         | Key used to sign artifacts |
-| ssl_com_username| no            |         | Username for signing .exe artifacts using SSL.com |
-| ssl_com_password| no            |         | Password for signing .exe artifacts using SSL.com |
-| ssl_com_secret  | no            |         | Secret for signing .exe artifacts using SSL.com |
-| svn_username    | if publishing |         | Username for publishing release artifacts to SVN dev/dist |
-| svn_password    | if publishing |         | Password for publishing release artifacts to SVN dev/dist |
-| nexus_username  | if publishing |         | Username for publishing release artifacts to Nexus |
-| nexus_password  | if publishing |         | Password for publishing release artifacts to Nexus |
-| publish         | no            | false   | Enable/disabling publish artifacts. Must be explicitly set to true to enable publishing. May be ignored depending on other factors. |
+| Input            | Required      | Default | Description |
+|----------------- |---------------|---------|-------------|
+| tlp_dir          | yes           |         | Directory of the top level project in dist/dev/ |
+| project_name     | yes           |         | Human readable name of the project |
+| project_id       | yes           |         | ID of the project, used in source artifact file name |
+| project_dir      | no            | ""      | Directory for the project in dev/dist/<tlp_dir>/. Omit if at the root |
+| gpg_signing_key  | if publishing |         | Key used to sign artifacts |
+| esigner_storepass| no            |         | Storepass for signing .exe artifacts using SSL.com |
+| esigner_keypass  | no            |         | Keypass for signing .exe artifacts using SSL.com |
+| svn_username     | if publishing |         | Username for publishing release artifacts to SVN dev/dist |
+| svn_password     | if publishing |         | Password for publishing release artifacts to SVN dev/dist |
+| nexus_username   | if publishing |         | Username for publishing release artifacts to Nexus |
+| nexus_password   | if publishing |         | Password for publishing release artifacts to Nexus |
+| publish          | no            | false   | Enable/disabling publish artifacts. Must be explicitly set to true to enable publishing. May be ignored depending on other factors. |
 
 ## Outputs
 
