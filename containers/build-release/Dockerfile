@@ -39,19 +39,23 @@ RUN \
     libmxml-dev \
     llvm \
     npm \
-    openjdk-17-jdk-headless \
     rpm \
     unzip \
     wine32 \
     winetricks \
     xvfb && \
-  echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" > /etc/apt/sources.list.d/sbt.list && \
+  echo "deb [signed-by=/etc/apt/trusted.gpg.d/scalasbt-release.gpg] https://repo.scala-sbt.org/scalasbt/debian all main" > /etc/apt/sources.list.d/sbt.list && \
   curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" | \
     gpg --no-default-keyring --keyring gnupg-ring:/etc/apt/trusted.gpg.d/scalasbt-release.gpg --import && \
   chmod 644 /etc/apt/trusted.gpg.d/scalasbt-release.gpg && \
+  echo "deb [siged-by=/etc/apt/trusted.gpg.d/adoptium.gpg] https://packages.adoptium.net/artifactory/deb jammy main" > /etc/apt/sources.list.d/adoptium.list && \
+  curl -sL "https://packages.adoptium.net/artifactory/api/gpg/key/public" | \
+    gpg --no-default-keyring --keyring gnupg-ring:/etc/apt/trusted.gpg.d/adoptium.gpg --import && \
+  chmod 644 /etc/apt/trusted.gpg.d/adoptium.gpg && \
   apt-get update && \
   apt-get install -y \
-    sbt && \
+    sbt \
+    temurin-17-jdk && \
   npm --no-update-notifier install --global yarn@1.22.19 node@20
 
 # Download and install Inno Setup via wine. Even though we provide options to

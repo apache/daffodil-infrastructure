@@ -18,18 +18,7 @@
 set -e
 
 set_java_version() {
-  # There are a number of standard ways to change the java version. One is to
-  # set JAVA_HOME and PATH, but its possible a build tool could execute
-  # /usr/bin/java* directly and use the wrong version. Another option is to use
-  # update-alternatives, but that needs slightly different commands for java 8
-  # vs java 17, so would make this function more complicated. Instead, we just
-  # manually overwrite the java* bin symlinks. This is really only fine because
-  # this is always expected to be run in a container.
-  JAVA_BIN_ROOT="/usr/lib/jvm/java-$1-openjdk-amd64/bin"
-  ln -sf $JAVA_BIN_ROOT/java    /usr/bin/java
-  ln -sf $JAVA_BIN_ROOT/javac   /usr/bin/javac
-  ln -sf $JAVA_BIN_ROOT/javadoc /usr/bin/javadoc
-  ln -sf $JAVA_BIN_ROOT/jar     /usr/bin/jar
+  update-java-alternatives --set temurin-$1-jdk-amd64
 }
 
 export WIX=/opt/wix/
