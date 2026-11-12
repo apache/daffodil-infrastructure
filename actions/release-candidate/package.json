@@ -4,14 +4,18 @@
   "scripts": {
     "build": "ncc build -o dist/main src/main.js && ncc build -o dist/post src/post.js"
   },
+  "type": "module",
   "license": "Apache-2.0",
   "dependencies": {
-    "@actions/artifact": "^5.0.2",
-    "@actions/core": "^2.0.2",
-    "@actions/exec": "^2.0.0",
-    "@actions/github": "^8.0.0"
+    "@actions/artifact": "^6.3.1",
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
+    "@actions/github": "^9.1.1"
   },
   "devDependencies": {
-    "@vercel/ncc": "^0.38.4"
+    "@vercel/ncc": "^0.45.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }
