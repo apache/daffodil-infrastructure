@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-const fs = require("fs");
-const os = require("os");
-const core = require("@actions/core");
-const { DefaultArtifactClient } = require('@actions/artifact')
-const { exec, getExecOutput } = require('@actions/exec');
+import fs from "node:fs";
+import os from "node:os";
+import * as core from "@actions/core";
+import { DefaultArtifactClient } from "@actions/artifact";
+import { exec, getExecOutput } from "@actions/exec";
 
 // Sign and publish all release artifacts. If publishing is disabled, we just
 // upload all the release candidate artifacts as GitHub workflow artifacts.

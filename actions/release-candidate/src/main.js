@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-const fs = require("fs");
-const os = require("os");
-const core = require("@actions/core");
-const github = require("@actions/github");
-const { exec, getExecOutput } = require('@actions/exec');
-const crypto = require("crypto");
+import fs from "node:fs";
+import os from "node:os";
+import * as core from "@actions/core";
+import * as github from "@actions/github";
+import { exec, getExecOutput } from "@actions/exec";
+import crypto from "node:crypto";
 
 async function run() {
 	try {
@@ -134,7 +134,7 @@ async function run() {
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, `pgpSigningKey := Some("${ gpg_signing_key_id }")\n`);
 
 		// enable SBT for publishing SBOM either locally or remotely
-		fs.appendFileSync(`${ sbt_dir }/plugins/build.sbt`, 'addSbtPlugin("com.github.sbt" %% "sbt-sbom" % "0.4.0")\n');
+		fs.appendFileSync(`${ sbt_dir }/plugins/build.sbt`, 'addSbtPlugin("com.github.sbt" %% "sbt-sbom" % "0.7.0")\n');
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'bomFormat := "xml"\n');
 
 		// download and install jsign for signing exe files, ignore dependencies assuming that the
