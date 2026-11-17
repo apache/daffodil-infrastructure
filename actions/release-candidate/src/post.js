@@ -29,6 +29,7 @@ async function run() {
 	try {
 		const project_name = core.getInput("project_name", { required: true });
 
+		const project_dist_dir = core.getState("project_dist_dir");
 		const artifact_dir = core.getState("artifact_dir");
 		const gpg_signing_key_id = core.getState("gpg_signing_key_id");
 		const do_publish = core.getState("do_publish") === "true";
@@ -68,7 +69,7 @@ async function run() {
 
 		if (do_publish) {
 			await exec("svn", ["add", artifact_dir]);
-			await exec("svn", ["commit", "--message", `Stage ${ project_name } ${ release_version }`, artifact_dir]);
+			await exec("svn", ["commit", "--message", `Stage ${ project_name } ${ release_version }`, project_dist_dir]);
 		} else {
 			// if publishing was disabled then this action was likely just triggered
 			// just for testing, so upload the maven-local and artifact directories so

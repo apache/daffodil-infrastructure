@@ -206,7 +206,7 @@ async function run() {
 		// publishing is enabled
 		const direntries = fs.readdirSync(project_dist_dir, { withFileTypes: true });
 		for(const dirent of direntries) {
-			if (dirent.isDirectory && dirent.name.startsWith(`${ project_version }-`)) {
+			if (dirent.isDirectory() && dirent.name.startsWith(`${ project_version }-`)) {
 				await exec("svn", ["delete", "--force", `${ dirent.parentPath }/${ dirent.name }`]);
 			}
 		}
@@ -236,6 +236,7 @@ async function run() {
 		core.setOutput("artifact_dir", artifact_dir);
 
 		// export state information for the post step
+		core.saveState("project_dist_dir", project_dist_dir);
 		core.saveState("artifact_dir", artifact_dir);
 		core.saveState("gpg_signing_key_id", gpg_signing_key_id);
 		core.saveState("do_publish", do_publish);
