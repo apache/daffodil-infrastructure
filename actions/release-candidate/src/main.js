@@ -136,6 +136,7 @@ async function run() {
 		// enable SBT for publishing SBOM either locally or remotely
 		fs.appendFileSync(`${ sbt_dir }/plugins/build.sbt`, 'addSbtPlugin("com.github.sbt" %% "sbt-sbom" % "0.7.0")\n');
 		fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'bomFormat := "xml"\n');
+		fs.appendFileSync(`${ sbt_dir }/build.sbt`, 'bomOutputPath := target.value.toString\n');
 
 		// download and install jsign for signing exe files, ignore dependencies assuming that the
 		// workflow already has java installed or will install java at some point
